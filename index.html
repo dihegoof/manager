@@ -481,8 +481,8 @@
         if (cloud && Array.isArray(cloud)) {
           items = cloud;
           saveLocal(items);
-        }
-        render();
+          render();
+        }
         setMsg($("appMsg"), "Sincronizado ✅");
       } catch (e) {
         console.error(e);
