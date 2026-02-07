@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inventário da Casa</title>
+  <link rel="stylesheet" href="css/style.css">
+
+  <style>
+    body { margin:0; min-height:100vh; }
+    .hidden { display:none !important; }
+
+    .center-screen{
+      min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px;
+    }
+    .login-card{ width:min(420px, 100%); border-radius:16px; padding:16px; }
+
+    .msg{ margin-top:10px; font-size:13px; opacity:.9; }
+    .msg.error{ opacity:1; }
+
+    /* Overlay de loading + animação */
+    .overlay{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.35); backdrop-filter: blur(2px);
+      opacity:0; pointer-events:none; transition: opacity .18s ease;
+    }
+    .overlay.on{ opacity:1; pointer-events:auto; }
+    .spinner{
+      width:46px; height:46px; border-radius:999px;
+      border:4px solid rgba(255,255,255,.25);
+      border-top-color: rgba(255,255,255,.95);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Transição simples entre telas */
+    .fade-in{ animation: fade .18s ease both; }
+    @keyframes fade { from { opacity:.2; transform: translateY(6px); } to { opacity:1; transform:none; } }
+  </style>
+</head>
+
+<body>
+
+  <!-- overlay loading -->
+  <div id="overlay" class="overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- ===== LOGIN ===== -->
+  <div id="loginView" class="center-screen">
+    <div class="card login-card">
+      <h1 style="margin:0 0 12px;">Entrar</h1>
+
+      <div class="row">
+        <input id="email" placeholder="Email" autocomplete="username" />
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <input id="pass" type="password" placeholder="Senha" autocomplete="current-password" />
+      </div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="loginBtn">Logar</button>
+      </div>
+
+      <div id="loginMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- ===== APP ===== -->
+  <div id="appView" class="wrap hidden">
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <h1 style="margin:0;">Inventário da Casa</h1>
+        <button id="logoutBtn" class="small">Sair</button>
+      </div>
+
+      <div id="appMsg" class="msg"></div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <input id="search" placeholder="Buscar item" />
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <input id="name" placeholder="Novo item:" />
+        <select id="unit">
+          <option value="un">un</option>
+          <option value="g">g</option>
+          <option value="kg">kg</option>
+          <option value="ml">ml</option>
+          <option value="l">l</option>
+        </select>
+        <input id="qty" type="number" step="0.1" placeholder="Qtd" style="max-width:120px;" />
+        <input id="min" type="number" step="0.1" placeholder="Mín" style="max-width:120px;" />
+        <button id="add">Adicionar</button>
+      </div>
+
+      <div class="muted">
+        Dica: O “Mín” (mínimo) emite um alerta ao chegar na quantidade definida.
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <button class="small" id="export">Exportar (backup)</button>
+        <button class="small" id="import">Importar</button>
+        <button class="small" id="clear">Zerar tudo</button>
+      </div>
+
+      <div class="list" id="list"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const SUPABASE_URL = "https://xzcgwnifypiqqushxrcs.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_9Nx27f1V0IgMkMw6BdTwmQ_B96lf3wq";
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const $ = (id) => document.getElementById(id);
+
+    const norm = (s) =>
+      (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+    const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
+
+    function setMsg(el, text, isError=false) {
+      el.textContent = text || "";
+      el.classList.toggle("error", !!isError);
+    }
+
+    function overlay(on){
+      $("overlay").classList.toggle("on", !!on);
+    }
+
+    function showLogin() {
+      $("loginView").classList.remove("hidden");
+      $("appView").classList.add("hidden");
+      $("loginView").classList.add("fade-in");
+    }
+
+    function showApp() {
+      $("loginView").classList.add("hidden");
+      $("appView").classList.remove("hidden");
+      $("appView").classList.add("fade-in");
+    }
+
+    // Local cache
+    const KEY = "home_inventory_v2";
+    const loadLocal = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+    const saveLocal = (arr) => localStorage.setItem(KEY, JSON.stringify(arr));
+
+    let items = loadLocal();
+    let saveTimer = null;
+
+    async function getUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      return user;
+    }
+
+    async function ensureRowExists() {
+      const user = await getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("inventory")
+        .upsert({
+          user_id: user.id,
+          items: items,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+
+      if (error) throw error;
+    }
+
+    async function loadCloud() {
+      const user = await getUser();
+      if (!user) return null;
+
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("items")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data?.items ?? [];
+    }
+
+    async function saveCloud(arr) {
+      const user = await getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("inventory")
+        .upsert({
+          user_id: user.id,
+          items: arr,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+
+      if (error) throw error;
+    }
+
+    // Salva agora (pra add/remover não “parecer que não salvou”)
+    async function saveNow(arr) {
+      saveLocal(arr);
+      try {
+        await saveCloud(arr);
+        setMsg($("appMsg"), "Salvo ✅");
+      } catch (e) {
+        console.error("Erro ao salvar no cloud:", e);
+        setMsg($("appMsg"), "Não salvou no cloud (provável RLS/policy). Veja Console (F12).", true);
+      }
+    }
+
+    // Debounce para +/− (não ficar espancando API)
+    function saveDebounced(arr) {
+      saveLocal(arr);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveNow(arr), 250);
+    }
+
+    function stepFor(unit) { return unit === "un" ? 1 : 0.1; }
+
+    function render() {
+      const q = norm($("search").value);
+      const list = $("list");
+      list.innerHTML = "";
+
+      const filtered = items
+        .filter(it => !q || (it.name_norm || "").includes(q))
+        .sort((a, b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
+
+      if (!filtered.length) {
+        const empty = document.createElement("div");
+        empty.className = "sub";
+        empty.textContent = "Nada por aqui. Adicione itens acima 🙂";
+        list.appendChild(empty);
+        return;
+      }
+
+      for (const it of filtered) {
+        const row = document.createElement("div");
+        row.className = "item";
+
+        const left = document.createElement("div");
+        const needs = (Number(it.min_qty) > 0 && Number(it.qty) <= Number(it.min_qty));
+        left.innerHTML = `
+          <div class="name">${it.name}</div>
+          <div class="sub">
+            ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
+            ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
+          </div>
+        `;
+
+        const controls = document.createElement("div");
+        controls.className = "controls";
+
+        const minus = document.createElement("button");
+        minus.textContent = "−";
+        minus.onclick = () => updateQty(it.id, -stepFor(it.unit));
+
+        const qty = document.createElement("div");
+        qty.className = "qty pill";
+        qty.textContent = `${it.qty} ${it.unit}`;
+
+        const plus = document.createElement("button");
+        plus.textContent = "+";
+        plus.onclick = () => updateQty(it.id, +stepFor(it.unit));
+
+        const del = document.createElement("button");
+        del.textContent = "🗑️";
+        del.title = "Remover";
+        del.onclick = () => removeItem(it.id);
+
+        controls.append(minus, qty, plus, del);
+        row.append(left, controls);
+        list.appendChild(row);
+      }
+    }
+
+    async function addItem() {
+      const name = $("name").value.trim();
+      const unit = $("unit").value;
+      const qty = Number($("qty").value || 0);
+      const minQty = Number($("min").value || 0);
+      if (!name) return;
+
+      const n = norm(name);
+      const existing = items.find(x => x.name_norm === n && x.unit === unit);
+
+      if (existing) {
+        existing.qty = round(existing.qty + qty);
+        existing.min_qty = minQty || existing.min_qty || 0;
+      } else {
+        items.push({
+          id: crypto.randomUUID(),
+          name,
+          name_norm: n,
+          unit,
+          qty: round(qty || 0),
+          min_qty: round(minQty || 0)
+        });
+      }
+
+      $("name").value = "";
+      $("qty").value = "";
+      $("min").value = "";
+      render();
+      await saveNow(items); // SALVA NA HORA
+    }
+
+    function updateQty(id, delta) {
+      const it = items.find(x => x.id === id);
+      if (!it) return;
+      it.qty = round(Math.max(0, Number(it.qty) + Number(delta)));
+      render();
+      saveDebounced(items); // debounce pro +/−
+    }
+
+    async function removeItem(id) {
+      items = items.filter(x => x.id !== id);
+      render();
+      await saveNow(items); // SALVA NA HORA
+    }
+
+    // Eventos
+    $("add").onclick = addItem;
+    $("search").addEventListener("input", render);
+    $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
+
+    $("export").onclick = () => {
+      const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "inventario.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    $("import").onclick = async () => {
+      const inp = document.createElement("input");
+      inp.type = "file";
+      inp.accept = "application/json";
+      inp.onchange = async () => {
+        const file = inp.files?.[0];
+        if (!file) return;
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!Array.isArray(data)) return;
+        items = data;
+        render();
+        await saveNow(items);
+      };
+      inp.click();
+    };
+
+    $("clear").onclick = async () => {
+      if (!confirm("Tem certeza que quer zerar tudo?")) return;
+      items = [];
+      render();
+      await saveNow(items);
+    };
+
+    // LOGIN
+    $("loginBtn").onclick = async () => {
+      setMsg($("loginMsg"), "");
+      const email = $("email").value.trim();
+      const password = $("pass").value;
+
+      overlay(true); // animação ao clicar
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          setMsg($("loginMsg"), "Erro: " + error.message, true);
+          return;
+        }
+
+        showApp();
+        render(); // cache local
+        setMsg($("appMsg"), "Sincronizando…");
+
+        await ensureRowExists();
+        const cloud = await loadCloud();
+        if (cloud && Array.isArray(cloud)) {
+          items = cloud;
+          saveLocal(items);
+        }
+
+        render();
+        setMsg($("appMsg"), "Sincronizado ✅");
+      } catch (e) {
+        console.error(e);
+        setMsg($("loginMsg"), "Logou, mas falhou na tabela. Provável RLS/policy. Veja Console (F12).", true);
+        showLogin();
+      } finally {
+        overlay(false);
+      }
+    };
+
+    $("logoutBtn").onclick = async () => {
+      await supabase.auth.signOut();
+      showLogin();
+      setMsg($("loginMsg"), "Saiu.");
+    };
+
+    // Boot
+    render();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      showApp();
+      setMsg($("appMsg"), "Sincronizando…");
+      try {
+        await ensureRowExists();
+        const cloud = await loadCloud();
+        if (cloud && Array.isArray(cloud)) {
+          items = cloud;
+          saveLocal(items);
+        }
+        render();
+        setMsg($("appMsg"), "Sincronizado ✅");
+      } catch (e) {
+        console.error(e);
+        setMsg($("appMsg"), "Sem acesso à tabela (RLS/policy). Veja Console (F12).", true);
+      }
+    } else {
+      showLogin();
+    }
+  </script>
+</body>
+</html>
