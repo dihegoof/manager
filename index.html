@@ -10,7 +10,6 @@
 <body>
   <div id="overlay" class="overlay"><div class="spinner"></div></div>
 
-  <!-- ===== AUTH VIEW ===== -->
   <div id="authView" class="center-screen">
     <div class="card login-card">
       <h1 class="title" id="authTitle">Entrar</h1>
@@ -127,10 +126,7 @@
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const $ = (id) => document.getElementById(id);
-
-    const norm = (s) =>
-      (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-
+    const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
 
     function setMsg(el, text, isError = false) {
@@ -147,48 +143,18 @@
       $("appView").classList.add("hidden");
       $("authView").classList.add("fade-in");
     }
-
     function showRegister() {
       $("authTitle").textContent = "Registrar";
       $("loginForm").classList.add("hidden");
       $("registerForm").classList.remove("hidden");
       $("authView").classList.remove("hidden");
       $("appView").classList.add("hidden");
-      $("registerForm").classList.add("fade-in");
       syncRegisterUI();
     }
-
     function showApp() {
       $("authView").classList.add("hidden");
       $("appView").classList.remove("hidden");
       $("appView").classList.add("fade-in");
-    }
-
-    // ===== regra "precisa comprar" =====
-    function needsBuy(it) {
-      const qty = Number(it.qty ?? 0);
-      const min = Number(it.min_qty ?? 0);
-      return qty <= 0 || (min > 0 && qty <= min);
-    }
-    let showOnlyNeeds = false;
-
-    // ===== local cache por inventário =====
-    const KEY_PREFIX = "home_inventory_inv_";
-    const loadLocal = (invId) => {
-      try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; }
-      catch { return []; }
-    };
-    const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
-
-    let items = [];
-    let saveTimer = null;
-
-    // ===== código curto =====
-    function makeInviteCode(len = 6) {
-      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      let out = "";
-      for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-      return out;
     }
 
     function syncRegisterUI() {
@@ -197,47 +163,19 @@
       if (gen) $("invCode").value = "";
     }
 
-    // ===== supabase helpers =====
+    function makeInviteCode(len = 6) {
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let out = "";
+      for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+      return out;
+    }
+
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser();
       return user;
     }
-    async function getUserId() {
-      const u = await getUser();
-      return u?.id || null;
-    }
 
-    async function ensureProfile(displayNameIfMissing = "Usuário") {
-      const uid = await getUserId();
-      if (!uid) return null;
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, current_inventory_id")
-        .eq("user_id", uid)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (data) return data;
-
-      const { error: insErr } = await supabase
-        .from("profiles")
-        .insert({ user_id: uid, display_name: displayNameIfMissing, current_inventory_id: null });
-
-      if (insErr) throw insErr;
-
-      return { user_id: uid, display_name: displayNameIfMissing, current_inventory_id: null };
-    }
-
-    async function setCurrentInventory(inventoryId) {
-      const uid = await getUserId();
-      const { error } = await supabase
-        .from("profiles")
-        .update({ current_inventory_id: inventoryId })
-        .eq("user_id", uid);
-      if (error) throw error;
-    }
-
+    // ===== inventory load/save (cloud) =====
     async function loadInventory(inventoryId) {
       const { data, error } = await supabase
         .from("inventories")
@@ -247,7 +185,6 @@
       if (error) throw error;
       return data;
     }
-
     async function saveInventoryItems(inventoryId, arr) {
       const { error } = await supabase
         .from("inventories")
@@ -256,121 +193,24 @@
       if (error) throw error;
     }
 
-    async function createInventoryWithInvite(invName) {
-      const uid = await getUserId();
-      if (!uid) throw new Error("Sem sessão (faça login).");
+    // ===== local cache por inventário =====
+    const KEY_PREFIX = "home_inventory_inv_";
+    const loadLocal = (invId) => { try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; } catch { return []; } };
+    const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
 
-      for (let attempt = 0; attempt < 10; attempt++) {
-        const invite_code = makeInviteCode(6);
-
-        const { data: inv, error } = await supabase
-          .from("inventories")
-          .insert({ name: invName || "Inventário da Casa", created_by: uid, invite_code })
-          .select("id, invite_code")
-          .single();
-
-        if (!error) return inv;
-
-        if ((error.message || "").toLowerCase().includes("duplicate")) continue;
-        throw error;
-      }
-      throw new Error("Não consegui gerar um código único. Tente novamente.");
-    }
-
-    async function joinByInviteCode(code) {
-      const { data, error } = await supabase
-        .from("inventories")
-        .select("id")
-        .eq("invite_code", code)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (!data?.id) throw new Error("Código do inventário não encontrado.");
-
-      const uid = await getUserId();
-      if (!uid) throw new Error("Sem sessão (faça login).");
-
-      const { error: memErr } = await supabase
-        .from("inventory_members")
-        .insert({ inventory_id: data.id, user_id: uid, role: "member" });
-
-      if (memErr) throw memErr;
-
-      await setCurrentInventory(data.id);
-      return data.id;
-    }
-
-    async function ownInventory(inventoryId) {
-      const uid = await getUserId();
-      const { error: memErr } = await supabase
-        .from("inventory_members")
-        .insert({ inventory_id: inventoryId, user_id: uid, role: "owner" });
-
-      if (memErr) throw memErr;
-
-      await setCurrentInventory(inventoryId);
-    }
-
-    // ===== realtime =====
-    let realtimeChannel = null;
+    // ===== app state =====
+    let items = [];
+    let saveTimer = null;
     let currentInventoryId = null;
+    let realtimeChannel = null;
+    let showOnlyNeeds = false;
 
-    async function startRealtime(inventoryId) {
-      if (realtimeChannel) {
-        await supabase.removeChannel(realtimeChannel);
-        realtimeChannel = null;
-      }
-
-      realtimeChannel = supabase
-        .channel("inv-" + inventoryId)
-        .on("postgres_changes", {
-          event: "*",
-          schema: "public",
-          table: "inventories",
-          filter: `id=eq.${inventoryId}`,
-        }, async (payload) => {
-          const newItems = payload?.new?.items;
-          if (Array.isArray(newItems)) {
-            items = newItems;
-            saveLocal(inventoryId, items);
-            render();
-            setMsg($("appMsg"), "Atualizado em tempo real ⚡");
-          }
-        })
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") setMsg($("appMsg"), "Tempo real ativo ⚡");
-        });
+    function needsBuy(it) {
+      const qty = Number(it.qty ?? 0);
+      const min = Number(it.min_qty ?? 0);
+      return qty <= 0 || (min > 0 && qty <= min);
     }
 
-    async function stopRealtime() {
-      if (realtimeChannel) {
-        await supabase.removeChannel(realtimeChannel);
-        realtimeChannel = null;
-      }
-    }
-
-    async function saveNow(arr) {
-      if (!currentInventoryId) return;
-      saveLocal(currentInventoryId, arr);
-      try {
-        await saveInventoryItems(currentInventoryId, arr);
-        setMsg($("appMsg"), "Salvo ✅");
-      } catch (e) {
-        console.error(e);
-        setMsg($("appMsg"), "Não salvou no cloud. Veja Console (F12).", true);
-      }
-    }
-
-    function saveDebounced(arr) {
-      if (!currentInventoryId) return;
-      saveLocal(currentInventoryId, arr);
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => saveNow(arr), 250);
-    }
-
-    function stepFor(unit) { return unit === "un" ? 1 : 0.1; }
-
-    // ===== render =====
     function render() {
       const q = norm($("search").value);
       const list = $("list");
@@ -412,7 +252,7 @@
 
         const minus = document.createElement("button");
         minus.textContent = "−";
-        minus.onclick = () => updateQty(it.id, -stepFor(it.unit));
+        minus.onclick = () => updateQty(it.id, it.unit === "un" ? -1 : -0.1);
 
         const qty = document.createElement("div");
         qty.className = "qty pill";
@@ -420,7 +260,7 @@
 
         const plus = document.createElement("button");
         plus.textContent = "+";
-        plus.onclick = () => updateQty(it.id, +stepFor(it.unit));
+        plus.onclick = () => updateQty(it.id, it.unit === "un" ? +1 : +0.1);
 
         const del = document.createElement("button");
         del.textContent = "🗑️";
@@ -431,6 +271,25 @@
         row.append(left, controls);
         list.appendChild(row);
       }
+    }
+
+    async function saveNow(arr) {
+      if (!currentInventoryId) return;
+      saveLocal(currentInventoryId, arr);
+      try {
+        await saveInventoryItems(currentInventoryId, arr);
+        setMsg($("appMsg"), "Salvo ✅");
+      } catch (e) {
+        console.error(e);
+        setMsg($("appMsg"), "Não salvou no cloud. Veja Console (F12).", true);
+      }
+    }
+
+    function saveDebounced(arr) {
+      if (!currentInventoryId) return;
+      saveLocal(currentInventoryId, arr);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveNow(arr), 250);
     }
 
     async function addItem() {
@@ -447,19 +306,10 @@
         existing.qty = round(existing.qty + qty);
         existing.min_qty = (minQty || minQty === 0) ? minQty : (existing.min_qty || 0);
       } else {
-        items.push({
-          id: crypto.randomUUID(),
-          name,
-          name_norm: n,
-          unit,
-          qty: round(qty || 0),
-          min_qty: round(minQty || 0)
-        });
+        items.push({ id: crypto.randomUUID(), name, name_norm: n, unit, qty: round(qty || 0), min_qty: round(minQty || 0) });
       }
 
-      $("name").value = "";
-      $("qty").value = "";
-      $("min").value = "";
+      $("name").value = ""; $("qty").value = ""; $("min").value = "";
       render();
       await saveNow(items);
     }
@@ -478,7 +328,186 @@
       await saveNow(items);
     }
 
-    // ===== app buttons =====
+    // ===== realtime =====
+    async function startRealtime(inventoryId) {
+      if (realtimeChannel) {
+        await supabase.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+      }
+
+      realtimeChannel = supabase
+        .channel("inv-" + inventoryId)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "inventories",
+          filter: `id=eq.${inventoryId}`,
+        }, (payload) => {
+          const newItems = payload?.new?.items;
+          if (Array.isArray(newItems)) {
+            items = newItems;
+            saveLocal(inventoryId, items);
+            render();
+            setMsg($("appMsg"), "Atualizado em tempo real ⚡");
+          }
+        })
+        .subscribe();
+    }
+
+    async function stopRealtime() {
+      if (realtimeChannel) {
+        await supabase.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+      }
+    }
+
+    // ===== boot =====
+    async function bootToInventory(inventoryId) {
+      currentInventoryId = inventoryId;
+
+      items = loadLocal(inventoryId) || [];
+      showApp();
+      render();
+      setMsg($("appMsg"), "Sincronizando…");
+
+      const data = await loadInventory(inventoryId);
+      if (Array.isArray(data?.items)) {
+        items = data.items;
+        saveLocal(inventoryId, items);
+      }
+      $("invCodeShow").textContent = data?.invite_code || "(sem código)";
+      render();
+
+      await startRealtime(inventoryId);
+      setMsg($("appMsg"), "Sincronizado ✅");
+    }
+
+    // ===== UI events =====
+    $("openRegisterBtn").onclick = () => showRegister();
+    $("backToLoginBtn").onclick = () => showLogin();
+    $("genInv").addEventListener("change", syncRegisterUI);
+
+    $("loginBtn").onclick = async () => {
+      setMsg($("loginMsg"), "");
+      const email = $("loginEmail").value.trim();
+      const password = $("loginPass").value;
+
+      overlay(true);
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) return setMsg($("loginMsg"), "Erro: " + error.message, true);
+
+        // pega inventário atual via profiles
+        const { data: prof, error: perr } = await supabase
+          .from("profiles")
+          .select("current_inventory_id")
+          .eq("user_id", (await getUser()).id)
+          .single();
+
+        if (perr) throw perr;
+        if (!prof?.current_inventory_id) {
+          showRegister();
+          setMsg($("regMsg"), "Você precisa gerar um inventário ou informar um código.", false);
+          return;
+        }
+        await bootToInventory(prof.current_inventory_id);
+      } catch (e) {
+        console.error(e);
+        setMsg($("loginMsg"), "Falha no login.", true);
+      } finally {
+        overlay(false);
+      }
+    };
+
+    // REGISTER (RPC: sem RLS no INSERT do inventário)
+    $("registerBtn").onclick = async () => {
+      setMsg($("regMsg"), "");
+
+      const displayName = $("regName").value.trim();
+      const email = $("regEmail").value.trim();
+      const password = $("regPass").value;
+      const gen = $("genInv").checked;
+      const code = ($("invCode").value || "").trim().toUpperCase();
+
+      if (!displayName) return setMsg($("regMsg"), "Informe seu nome.", true);
+      if (!email) return setMsg($("regMsg"), "Informe seu email.", true);
+      if (!password || password.length < 6) return setMsg($("regMsg"), "Senha com pelo menos 6 caracteres.", true);
+      if (!gen && !code) return setMsg($("regMsg"), "Informe o código do inventário.", true);
+
+      overlay(true);
+      try {
+        const { error: signUpErr } = await supabase.auth.signUp({ email, password });
+
+        if (signUpErr) {
+          const msg = (signUpErr.message || "").toLowerCase();
+          if (msg.includes("already") || msg.includes("exists") || msg.includes("registered")) {
+            setMsg($("regMsg"), "Esse email já tem conta. Volte e faça login.", true);
+            showLogin();
+            return;
+          }
+          return setMsg($("regMsg"), "Erro: " + signUpErr.message, true);
+        }
+
+        // garante sessão
+        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) {
+          setMsg($("regMsg"), "Conta criada! Agora faça login.", false);
+          showLogin();
+          return;
+        }
+
+        // salva nome no profile
+        const user = await getUser();
+        await supabase.from("profiles").upsert({
+          user_id: user.id,
+          display_name: displayName
+        });
+
+        let inventoryId;
+
+        if (gen) {
+          const invite = makeInviteCode(6);
+          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
+            p_name: "Inventário da Casa",
+            p_invite_code: invite
+          });
+          if (error) throw error;
+          inventoryId = data?.[0]?.inventory_id;
+        } else {
+          const { data, error } = await supabase.rpc("join_inventory_by_code", { p_code: code });
+          if (error) throw error;
+          inventoryId = data?.[0]?.inventory_id;
+        }
+
+        if (!inventoryId) throw new Error("Não consegui obter o inventário.");
+
+        await bootToInventory(inventoryId);
+      } catch (e) {
+        console.error(e);
+        setMsg($("regMsg"), e?.message || "Falha no registro.", true);
+      } finally {
+        overlay(false);
+      }
+    };
+
+    $("logoutBtn").onclick = async () => {
+      await stopRealtime();
+      await supabase.auth.signOut();
+      showLogin();
+      setMsg($("loginMsg"), "Saiu.");
+    };
+
+    $("invCodeShow").onclick = async () => {
+      const t = $("invCodeShow").textContent || "";
+      if (!t) return;
+      try {
+        await navigator.clipboard.writeText(t);
+        setMsg($("appMsg"), "Código copiado ✅");
+      } catch {
+        setMsg($("appMsg"), "Não consegui copiar.", true);
+      }
+    };
+
     $("add").onclick = addItem;
     $("search").addEventListener("input", render);
     $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
@@ -524,143 +553,27 @@
       await saveNow(items);
     };
 
-    $("logoutBtn").onclick = async () => {
-      await stopRealtime();
-      await supabase.auth.signOut();
-      showLogin();
-      setMsg($("loginMsg"), "Saiu.");
-    };
-
-    $("invCodeShow").onclick = async () => {
-      const t = $("invCodeShow").textContent || "";
-      if (!t) return;
-      try {
-        await navigator.clipboard.writeText(t);
-        setMsg($("appMsg"), "Código copiado ✅");
-      } catch {
-        setMsg($("appMsg"), "Não consegui copiar.", true);
-      }
-    };
-
-    // ===== auth ui events =====
-    $("openRegisterBtn").onclick = () => showRegister();
-    $("backToLoginBtn").onclick = () => showLogin();
-    $("genInv").addEventListener("change", syncRegisterUI);
-
-    // ===== LOGIN =====
-    $("loginBtn").onclick = async () => {
-      setMsg($("loginMsg"), "");
-      const email = $("loginEmail").value.trim();
-      const password = $("loginPass").value;
-
-      overlay(true);
-      try {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) { setMsg($("loginMsg"), "Erro: " + error.message, true); return; }
-        await bootAfterAuth();
-      } catch (e) {
-        console.error(e);
-        setMsg($("loginMsg"), "Falha no login.", true);
-      } finally {
-        overlay(false);
-      }
-    };
-
-    // ===== REGISTER (FIX: signUp -> signIn antes de INSERT) =====
-    $("registerBtn").onclick = async () => {
-      setMsg($("regMsg"), "");
-
-      const displayName = $("regName").value.trim();
-      const email = $("regEmail").value.trim();
-      const password = $("regPass").value;
-      const gen = $("genInv").checked;
-      const code = ($("invCode").value || "").trim().toUpperCase();
-
-      if (!displayName) return setMsg($("regMsg"), "Informe seu nome.", true);
-      if (!email) return setMsg($("regMsg"), "Informe seu email.", true);
-      if (!password || password.length < 6) return setMsg($("regMsg"), "Senha com pelo menos 6 caracteres.", true);
-      if (!gen && !code) return setMsg($("regMsg"), "Informe o código do inventário.", true);
-
-      overlay(true);
-      try {
-        // 1) cria a conta
-        const { error: signUpErr } = await supabase.auth.signUp({ email, password });
-        if (signUpErr) { setMsg($("regMsg"), "Erro: " + signUpErr.message, true); return; }
-
-        // 2) FIX: garante sessão antes de mexer no DB (evita auth.uid null -> RLS)
-        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInErr) {
-          setMsg($("regMsg"),
-            "Conta criada ✅ Agora faça login. (Talvez precise confirmar o email no Supabase).",
-            false
-          );
-          showLogin();
-          return;
-        }
-
-        // 3) agora está logado: cria perfil + inventário/vínculo
-        await ensureProfile(displayName);
-
-        let invId;
-        if (gen) {
-          const inv = await createInventoryWithInvite("Inventário da Casa");
-          invId = inv.id;
-          await ownInventory(invId);
-        } else {
-          invId = await joinByInviteCode(code);
-        }
-
-        await bootAfterAuth(invId);
-      } catch (e) {
-        console.error(e);
-        setMsg($("regMsg"), (e?.message || "Falha no registro."), true);
-      } finally {
-        overlay(false);
-      }
-    };
-
-    // ===== BOOT =====
-    async function bootAfterAuth(forceInventoryId = null) {
-      const user = await getUser();
-      if (!user) { showLogin(); return; }
-
-      const profile = await ensureProfile("Usuário");
-      let invId = forceInventoryId || profile?.current_inventory_id || null;
-
-      if (!invId) {
-        showRegister();
-        setMsg($("regMsg"), "Para usar, gere um inventário ou informe o código de um existente.", false);
-        return;
-      }
-
-      currentInventoryId = invId;
-
-      // cache local
-      items = loadLocal(invId) || [];
-      showApp();
-      render();
-      setMsg($("appMsg"), "Sincronizando…");
-
-      // cloud
-      const data = await loadInventory(invId);
-      if (Array.isArray(data?.items)) {
-        items = data.items;
-        saveLocal(invId, items);
-      }
-      $("invCodeShow").textContent = data?.invite_code || "(sem código)";
-      render();
-
-      await startRealtime(invId);
-      setMsg($("appMsg"), "Sincronizado ✅");
-    }
-
-    // ===== INIT =====
+    // init
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         overlay(true);
-        try { await bootAfterAuth(); }
-        finally { overlay(false); }
+        try {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("current_inventory_id")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+          if (prof?.current_inventory_id) {
+            await bootToInventory(prof.current_inventory_id);
+          } else {
+            showRegister();
+            setMsg($("regMsg"), "Você precisa gerar um inventário ou informar um código.", false);
+          }
+        } finally {
+          overlay(false);
+        }
       } else {
         showLogin();
       }
