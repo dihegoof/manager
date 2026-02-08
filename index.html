@@ -185,6 +185,19 @@
       return user;
     }
 
+    // ===== pending setup (para Confirm Email ON) =====
+    const PENDING_KEY = "pending_inv_setup_v1";
+
+    function setPendingSetup(obj) {
+      localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
+    }
+    function getPendingSetup() {
+      try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; }
+    }
+    function clearPendingSetup() {
+      localStorage.removeItem(PENDING_KEY);
+    }
+
     // ===== inventory load/save (cloud) =====
     async function loadInventory(inventoryId) {
       const { data, error } = await supabase
@@ -392,6 +405,55 @@
       setMsg($("appMsg"), "Sincronizado ✅");
     }
 
+    // ===== finalize pending setup after confirm =====
+    async function finalizePendingSetupIfNeeded() {
+      const pending = getPendingSetup();
+      if (!pending) return false;
+
+      const user = await getUser();
+      if (!user) return false;
+
+      overlay(true);
+      try {
+        // garante profile com nome
+        await supabase.from("profiles").upsert({
+          user_id: user.id,
+          display_name: pending.displayName || "Usuário",
+        });
+
+        let inventoryId;
+
+        if (pending.mode === "create") {
+          // cria inventário
+          const invite = makeInviteCode(6);
+          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
+            p_name: "Inventário da Casa",
+            p_invite_code: invite
+          });
+          if (error) throw error;
+          inventoryId = data?.[0]?.inventory_id;
+        } else if (pending.mode === "join") {
+          const { data, error } = await supabase.rpc("join_inventory_by_code", { p_code: pending.code });
+          if (error) throw error;
+          inventoryId = data?.[0]?.inventory_id;
+        }
+
+        if (!inventoryId) throw new Error("Não consegui finalizar o inventário após confirmação.");
+
+        clearPendingSetup();
+        await bootToInventory(inventoryId);
+        return true;
+      } catch (e) {
+        console.error(e);
+        // não apaga pending se falhou, pra tentar de novo
+        showRegister();
+        setMsg($("regMsg"), "Confirmou e logou ✅ Agora finalize o inventário (erro ao automatizar).", true);
+        return false;
+      } finally {
+        overlay(false);
+      }
+    }
+
     // ===== UI events =====
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
@@ -406,6 +468,10 @@
       try {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return setMsg($("loginMsg"), "Erro: " + error.message, true);
+
+        // se tiver pending (por ex: usuário confirmou e voltou depois), tenta finalizar
+        const finalized = await finalizePendingSetupIfNeeded();
+        if (finalized) return;
 
         const user = await getUser();
 
@@ -449,7 +515,14 @@
 
       overlay(true);
       try {
-        // IMPORTANTE: forçando redirect do email pro GitHub Pages
+        // salva a intenção para finalizar após confirmação (se Confirm Email estiver ON)
+        setPendingSetup({
+          displayName,
+          mode: gen ? "create" : "join",
+          code: gen ? "" : code,
+          createdAt: Date.now()
+        });
+
         const { error: signUpErr } = await supabase.auth.signUp({
           email,
           password,
@@ -457,6 +530,7 @@
         });
 
         if (signUpErr) {
+          clearPendingSetup(); // não deixa pendência suja se nem criou a conta
           const msg = (signUpErr.message || "").toLowerCase();
           if (msg.includes("already") || msg.includes("exists") || msg.includes("registered")) {
             setMsg($("regMsg"), "Esse email já tem conta. Volte e faça login.", true);
@@ -466,43 +540,22 @@
           return setMsg($("regMsg"), "Erro: " + signUpErr.message, true);
         }
 
-        // Tenta logar. Se Confirm Email estiver ON, isso pode falhar (email not confirmed).
+        // tenta logar (se Confirm OFF, vai dar certo e finaliza imediatamente)
         const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
         if (signInErr) {
-          // Aqui é o comportamento correto com Confirm Email ON:
-          setMsg($("regMsg"), "Conta criada ✅ Confirme o email e depois faça login.", false);
+          // Confirm Email ON: agora o certo é pedir confirmação e não fazer mais nada
+          setMsg($("regMsg"), "Conta criada ✅ Confirme o email e você vai entrar direto no inventário.", false);
           showLogin();
-          setMsg($("loginMsg"), "Confirme o email e então faça login.", false);
+          setMsg($("loginMsg"), "Confirme o email e depois faça login (se não entrar sozinho).", false);
           return;
         }
 
-        // Se chegou aqui, está logado (Confirm OFF) e podemos criar/vincular inventário
-        const user = await getUser();
-
-        await supabase.from("profiles").upsert({
-          user_id: user.id,
-          display_name: displayName
-        });
-
-        let inventoryId;
-
-        if (gen) {
-          const invite = makeInviteCode(6);
-          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
-            p_name: "Inventário da Casa",
-            p_invite_code: invite
-          });
-          if (error) throw error;
-          inventoryId = data?.[0]?.inventory_id;
-        } else {
-          const { data, error } = await supabase.rpc("join_inventory_by_code", { p_code: code });
-          if (error) throw error;
-          inventoryId = data?.[0]?.inventory_id;
+        // Confirm OFF: já está logado, finaliza agora (usa o mesmo fluxo do pending)
+        const finalized = await finalizePendingSetupIfNeeded();
+        if (!finalized) {
+          setMsg($("regMsg"), "Logado ✅ Mas não consegui finalizar o inventário automaticamente.", true);
+          showRegister();
         }
-
-        if (!inventoryId) throw new Error("Não consegui obter o inventário.");
-
-        await bootToInventory(inventoryId);
       } catch (e) {
         console.error(e);
         setMsg($("regMsg"), e?.message || "Falha no registro.", true);
@@ -577,11 +630,16 @@
     // init
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
+
       if (session?.user) {
+        // Se acabou de confirmar email, normalmente já tem sessão
+        // -> tenta finalizar automaticamente (create/join) se houver pending
+        const finalized = await finalizePendingSetupIfNeeded();
+        if (finalized) return;
+
         overlay(true);
         try {
           const user = await getUser();
-
           const { data: prof } = await supabase
             .from("profiles")
             .select("current_inventory_id")
@@ -591,6 +649,7 @@
           if (prof?.current_inventory_id) {
             await bootToInventory(prof.current_inventory_id);
           } else {
+            // aqui é "logado mas sem inventário" (caso usuário antigo)
             showRegister();
             setMsg($("regMsg"), "Logado ✅ Agora gere um inventário ou informe um código.", false);
           }
