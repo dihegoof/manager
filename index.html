@@ -401,53 +401,53 @@
 
     // ===== finalize pending setup =====
     async function finalizePendingSetupIfNeeded() {
-      const pending = getPendingSetup();
-      if (!pending) return false;
+  const pending = getPendingSetup();
+  if (!pending) return false;
 
-      const user = await getUser();
-      if (!user) return false;
+  const user = await getUser();
+  if (!user) return false;
 
-      overlay(true);
-      try {
-        // profile
-        await supabase.from("profiles").upsert({
-          user_id: user.id,
-          display_name: pending.displayName || "Usuário",
-        });
+  overlay(true);
+  try {
+    // profile
+    const { error: pErr } = await supabase.from("profiles").upsert({
+      user_id: user.id,
+      display_name: pending.displayName || "Usuário",
+    });
+    if (pErr) throw new Error("Profile: " + pErr.message);
 
-        let inventoryId = null;
+    let inventoryId = null;
 
-        if (pending.mode === "create") {
-          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
-            p_name: "Inventário da Casa",
-            p_display_name: pending.displayName || "Usuário"
-          });
-          if (error) { console.error("RPC error:", error); throw new Error(error.message || "RPC falhou"); }
-          inventoryId = data?.[0]?.inventory_id;
-        } else if (pending.mode === "join") {
-          const { data, error } = await supabase.rpc("join_inventory_by_code", {
-            p_code: pending.code,
-            p_display_name: pending.displayName || "Usuário"
-          });
-          if (error) { console.error("RPC error:", error); throw new Error(error.message || "RPC falhou"); }
-          inventoryId = data?.[0]?.inventory_id;
-        }
-
-        if (!inventoryId) throw new Error("Não consegui obter o inventário.");
-
-        clearPendingSetup();
-        await bootToInventory(inventoryId);
-        return true;
-      } catch (e) {
-        console.error(e);
-        showRegister();
-        setMsg($("regMsg"), "Logado ✅ Mas não consegui finalizar o inventário automaticamente.", true);
-        return false;
-      } finally {
-        overlay(false);
-      }
+    if (pending.mode === "create") {
+      const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
+        p_name: "Inventário da Casa",
+        p_display_name: pending.displayName || "Usuário",
+      });
+      if (error) throw new Error("RPC create: " + error.message);
+      inventoryId = data?.[0]?.inventory_id;
+    } else if (pending.mode === "join") {
+      const { data, error } = await supabase.rpc("join_inventory_by_code", {
+        p_code: pending.code,
+        p_display_name: pending.displayName || "Usuário",
+      });
+      if (error) throw new Error("RPC join: " + error.message);
+      inventoryId = data?.[0]?.inventory_id;
     }
 
+    if (!inventoryId) throw new Error("Sem inventoryId (RPC não retornou).");
+
+    clearPendingSetup();
+    await bootToInventory(inventoryId);
+    return true;
+  } catch (e) {
+    console.error(e);
+    showRegister();
+    setMsg($("regMsg"), String(e?.message || e), true); // <-- agora mostra o erro real
+    return false;
+  } finally {
+    overlay(false);
+  }
+}
     // ===== UI events =====
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
