@@ -306,12 +306,11 @@
         row.className = "item";
 
         const left = document.createElement("div");
-        const needs = (Number(it.min_qty) > 0 && Number(it.qty) <= Number(it.min_qty));
-        left.innerHTML = `
+        const needs = (Number(it.qty) === 0) || (Number(it.min_qty) > 0 && Number(it.qty) <= Number(it.min_qty));
           <div class="name">${it.name}</div>
           <div class="sub">
             ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
-            ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
+            ${needs ? ' • <span class="pill danger">em falta</span>' : ""}
           </div>
         `;
 
