@@ -258,6 +258,8 @@
 
     async function createInventoryWithInvite(invName) {
       const uid = await getUserId();
+      if (!uid) throw new Error("Sem sessão (faça login).");
+
       for (let attempt = 0; attempt < 10; attempt++) {
         const invite_code = makeInviteCode(6);
 
@@ -269,16 +271,13 @@
 
         if (!error) return inv;
 
-        // colisão do unique → tenta de novo
         if ((error.message || "").toLowerCase().includes("duplicate")) continue;
-
         throw error;
       }
       throw new Error("Não consegui gerar um código único. Tente novamente.");
     }
 
     async function joinByInviteCode(code) {
-      // busca o inventário pelo código curto
       const { data, error } = await supabase
         .from("inventories")
         .select("id")
@@ -289,6 +288,8 @@
       if (!data?.id) throw new Error("Código do inventário não encontrado.");
 
       const uid = await getUserId();
+      if (!uid) throw new Error("Sem sessão (faça login).");
+
       const { error: memErr } = await supabase
         .from("inventory_members")
         .insert({ inventory_id: data.id, user_id: uid, role: "member" });
@@ -565,7 +566,7 @@
       }
     };
 
-    // ===== REGISTER =====
+    // ===== REGISTER (FIX: signUp -> signIn antes de INSERT) =====
     $("registerBtn").onclick = async () => {
       setMsg($("regMsg"), "");
 
@@ -575,39 +576,37 @@
       const gen = $("genInv").checked;
       const code = ($("invCode").value || "").trim().toUpperCase();
 
-      if (!displayName) { setMsg($("regMsg"), "Informe seu nome.", true); return; }
-      if (!email) { setMsg($("regMsg"), "Informe seu email.", true); return; }
-      if (!password || password.length < 6) { setMsg($("regMsg"), "Senha com pelo menos 6 caracteres.", true); return; }
-
-      // regra que você pediu: não deixa sem um dos dois
-      if (!gen && !code) {
-        setMsg($("regMsg"), "Desmarcou 'Gerar inventário'? Então informe o código do inventário.", true);
-        return;
-      }
+      if (!displayName) return setMsg($("regMsg"), "Informe seu nome.", true);
+      if (!email) return setMsg($("regMsg"), "Informe seu email.", true);
+      if (!password || password.length < 6) return setMsg($("regMsg"), "Senha com pelo menos 6 caracteres.", true);
+      if (!gen && !code) return setMsg($("regMsg"), "Informe o código do inventário.", true);
 
       overlay(true);
       try {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) { setMsg($("regMsg"), "Erro: " + error.message, true); return; }
+        // 1) cria a conta
+        const { error: signUpErr } = await supabase.auth.signUp({ email, password });
+        if (signUpErr) { setMsg($("regMsg"), "Erro: " + signUpErr.message, true); return; }
 
-        // se exigir confirmação de email, pode não haver sessão imediatamente
-        const user = await getUser();
-        if (!user) {
-          setMsg($("regMsg"), "Conta criada! Faça login (se pedir, confirme o email).");
+        // 2) FIX: garante sessão antes de mexer no DB (evita auth.uid null -> RLS)
+        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) {
+          setMsg($("regMsg"),
+            "Conta criada ✅ Agora faça login. (Talvez precise confirmar o email no Supabase).",
+            false
+          );
           showLogin();
           return;
         }
 
+        // 3) agora está logado: cria perfil + inventário/vínculo
         await ensureProfile(displayName);
 
         let invId;
         if (gen) {
-          // cria inventário + owner
           const inv = await createInventoryWithInvite("Inventário da Casa");
           invId = inv.id;
           await ownInventory(invId);
         } else {
-          // entra pelo código curto
           invId = await joinByInviteCode(code);
         }
 
@@ -629,9 +628,8 @@
       let invId = forceInventoryId || profile?.current_inventory_id || null;
 
       if (!invId) {
-        // usuário sem inventário: manda registrar (e escolher gerar/vincular)
         showRegister();
-        setMsg($("regMsg"), "Para usar, você precisa gerar um inventário ou informar o código de um existente.", false);
+        setMsg($("regMsg"), "Para usar, gere um inventário ou informe o código de um existente.", false);
         return;
       }
 
