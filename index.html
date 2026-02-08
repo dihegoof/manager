@@ -107,6 +107,9 @@
       <div class="divider"></div>
 
       <div class="row">
+        <!-- ✅ NOVO: botão toggle -->
+        <button class="small" id="filterList">Filtrar lista</button>
+
         <button class="small" id="export">Exportar (backup)</button>
         <button class="small" id="import">Importar</button>
         <button class="small" id="clear">Zerar tudo</button>
@@ -151,6 +154,16 @@
       $("appView").classList.add("fade-in");
     }
 
+    // ✅ NOVO: regra robusta "precisa comprar"
+    function needsBuy(it) {
+      const qty = Number(it.qty ?? 0);
+      const min = Number(it.min_qty ?? 0);
+      return qty <= 0 || (min > 0 && qty <= min);
+    }
+
+    // ✅ NOVO: toggle do filtro
+    let showOnlyNeeds = false;
+
     // Local cache
     const KEY = "home_inventory_v2";
     const loadLocal = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
@@ -171,7 +184,6 @@
       const user = await getUser();
       if (!user) return;
 
-      // evita canal duplicado
       if (realtimeChannel) {
         await supabase.removeChannel(realtimeChannel);
         realtimeChannel = null;
@@ -196,7 +208,6 @@
                 render();
                 setMsg($("appMsg"), "Atualizado em tempo real ⚡");
               } else {
-                // fallback
                 const cloud = await loadCloud();
                 if (cloud && Array.isArray(cloud)) {
                   items = cloud;
@@ -284,25 +295,25 @@
 
     function stepFor(unit) { return unit === "un" ? 1 : 0.1; }
 
-    function needsBuy(it){
-      const qty = Number(it.qty ?? 0);
-      const min = Number(it.min_qty ?? 0);
-    return qty <= 0 || (min > 0 && qty <= min);
-}
-
     function render() {
       const q = norm($("search").value);
       const list = $("list");
       list.innerHTML = "";
 
       const filtered = items
-        .filter(it => !q || (it.name_norm || "").includes(q))
+        .filter(it => {
+          const matchesSearch = !q || (it.name_norm || "").includes(q);
+          const matchesNeeds = !showOnlyNeeds || needsBuy(it);
+          return matchesSearch && matchesNeeds;
+        })
         .sort((a, b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
 
       if (!filtered.length) {
         const empty = document.createElement("div");
         empty.className = "sub";
-        empty.textContent = "Nada por aqui. Adicione itens acima 🙂";
+        empty.textContent = showOnlyNeeds
+          ? "Nenhum item está marcado como “precisa comprar” 🙂"
+          : "Nada por aqui. Adicione itens acima 🙂";
         list.appendChild(empty);
         return;
       }
@@ -313,10 +324,12 @@
 
         const left = document.createElement("div");
         const needs = needsBuy(it);
+
+        left.innerHTML = `
           <div class="name">${it.name}</div>
           <div class="sub">
             ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
-            ${needs ? ' • <span class="pill danger">em falta</span>' : ""}
+            ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
           </div>
         `;
 
@@ -358,7 +371,7 @@
 
       if (existing) {
         existing.qty = round(existing.qty + qty);
-        existing.min_qty = minQty || existing.min_qty || 0;
+        existing.min_qty = (minQty || minQty === 0) ? minQty : (existing.min_qty || 0);
       } else {
         items.push({
           id: crypto.randomUUID(),
@@ -395,6 +408,13 @@
     $("add").onclick = addItem;
     $("search").addEventListener("input", render);
     $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
+
+    // ✅ NOVO: botão toggle de filtro
+    $("filterList").onclick = () => {
+      showOnlyNeeds = !showOnlyNeeds;
+      $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
+      render();
+    };
 
     $("export").onclick = () => {
       const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
@@ -456,7 +476,6 @@
         }
         render();
 
-        // liga realtime
         await startRealtime();
 
         setMsg($("appMsg"), "Sincronizado ✅");
