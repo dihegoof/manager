@@ -123,7 +123,17 @@
 
     const SUPABASE_URL = "https://xzcgwnifypiqqushxrcs.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_9Nx27f1V0IgMkMw6BdTwmQ_B96lf3wq";
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // GitHub Pages do seu app (fixo)
+    const APP_URL = "https://dihegoof.github.io/manager/";
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true, // captura sessão quando volta do confirm/email
+      },
+    });
 
     const $ = (id) => document.getElementById(id);
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -397,19 +407,22 @@
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return setMsg($("loginMsg"), "Erro: " + error.message, true);
 
-        // pega inventário atual via profiles
+        const user = await getUser();
+
         const { data: prof, error: perr } = await supabase
           .from("profiles")
           .select("current_inventory_id")
-          .eq("user_id", (await getUser()).id)
-          .single();
+          .eq("user_id", user.id)
+          .maybeSingle();
 
         if (perr) throw perr;
+
         if (!prof?.current_inventory_id) {
           showRegister();
-          setMsg($("regMsg"), "Você precisa gerar um inventário ou informar um código.", false);
+          setMsg($("regMsg"), "Logado ✅ Agora gere um inventário ou informe um código.", false);
           return;
         }
+
         await bootToInventory(prof.current_inventory_id);
       } catch (e) {
         console.error(e);
@@ -419,7 +432,7 @@
       }
     };
 
-    // REGISTER (RPC: sem RLS no INSERT do inventário)
+    // ===== REGISTER (com redirect do GitHub Pages) =====
     $("registerBtn").onclick = async () => {
       setMsg($("regMsg"), "");
 
@@ -436,7 +449,12 @@
 
       overlay(true);
       try {
-        const { error: signUpErr } = await supabase.auth.signUp({ email, password });
+        // IMPORTANTE: forçando redirect do email pro GitHub Pages
+        const { error: signUpErr } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: APP_URL }
+        });
 
         if (signUpErr) {
           const msg = (signUpErr.message || "").toLowerCase();
@@ -448,16 +466,19 @@
           return setMsg($("regMsg"), "Erro: " + signUpErr.message, true);
         }
 
-        // garante sessão
+        // Tenta logar. Se Confirm Email estiver ON, isso pode falhar (email not confirmed).
         const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
         if (signInErr) {
-          setMsg($("regMsg"), "Conta criada! Agora faça login.", false);
+          // Aqui é o comportamento correto com Confirm Email ON:
+          setMsg($("regMsg"), "Conta criada ✅ Confirme o email e depois faça login.", false);
           showLogin();
+          setMsg($("loginMsg"), "Confirme o email e então faça login.", false);
           return;
         }
 
-        // salva nome no profile
+        // Se chegou aqui, está logado (Confirm OFF) e podemos criar/vincular inventário
         const user = await getUser();
+
         await supabase.from("profiles").upsert({
           user_id: user.id,
           display_name: displayName
@@ -559,17 +580,19 @@
       if (session?.user) {
         overlay(true);
         try {
+          const user = await getUser();
+
           const { data: prof } = await supabase
             .from("profiles")
             .select("current_inventory_id")
-            .eq("user_id", session.user.id)
+            .eq("user_id", user.id)
             .maybeSingle();
 
           if (prof?.current_inventory_id) {
             await bootToInventory(prof.current_inventory_id);
           } else {
             showRegister();
-            setMsg($("regMsg"), "Você precisa gerar um inventário ou informar um código.", false);
+            setMsg($("regMsg"), "Logado ✅ Agora gere um inventário ou informe um código.", false);
           }
         } finally {
           overlay(false);
