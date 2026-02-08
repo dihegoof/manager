@@ -13,24 +13,79 @@
     <div class="spinner"></div>
   </div>
 
-  <!-- ===== LOGIN ===== -->
-  <div id="loginView" class="center-screen">
+  <!-- ===== AUTH (LOGIN / REGISTER / JOIN) ===== -->
+  <div id="authView" class="center-screen">
     <div class="card login-card">
-      <h1 class="title">Entrar</h1>
+      <h1 class="title" id="authTitle">Entrar</h1>
 
-      <div class="row">
-        <input id="email" placeholder="Email" autocomplete="username" />
+      <!-- LOGIN FORM -->
+      <div id="loginForm">
+        <div class="row">
+          <input id="loginEmail" placeholder="Email" autocomplete="username" />
+        </div>
+        <div class="row mt10">
+          <input id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" />
+        </div>
+        <div class="row mt12">
+          <button id="loginBtn">Logar</button>
+        </div>
+
+        <div class="row mt10">
+          <button id="goRegister" class="small" type="button">Criar conta</button>
+          <button id="goJoin" class="small" type="button">Vincular pelo uuidInv</button>
+        </div>
+
+        <div id="authMsg" class="msg"></div>
       </div>
 
-      <div class="row mt10">
-        <input id="pass" type="password" placeholder="Senha" autocomplete="current-password" />
+      <!-- REGISTER FORM -->
+      <div id="registerForm" class="hidden">
+        <div class="row">
+          <input id="regName" placeholder="Seu nome" autocomplete="name" />
+        </div>
+        <div class="row mt10">
+          <input id="regEmail" placeholder="Email" autocomplete="username" />
+        </div>
+        <div class="row mt10">
+          <input id="regPass" type="password" placeholder="Senha" autocomplete="new-password" />
+        </div>
+        <div class="row mt10">
+          <input id="regInvName" placeholder="Nome do inventário (ex: Casa do Di)" />
+        </div>
+
+        <div class="row mt12">
+          <button id="registerBtn">Criar conta e inventário</button>
+        </div>
+
+        <div class="row mt10">
+          <button id="backToLogin1" class="small" type="button">Voltar</button>
+        </div>
+
+        <div id="regMsg" class="msg"></div>
       </div>
 
-      <div class="row mt12">
-        <button id="loginBtn">Logar</button>
-      </div>
+      <!-- JOIN FORM -->
+      <div id="joinForm" class="hidden">
+        <div class="row">
+          <input id="joinEmail" placeholder="Email" autocomplete="username" />
+        </div>
+        <div class="row mt10">
+          <input id="joinPass" type="password" placeholder="Senha" autocomplete="current-password" />
+        </div>
+        <div class="row mt10">
+          <input id="joinUuid" placeholder="uuidInv (código da casa)" autocomplete="off" />
+        </div>
 
-      <div id="loginMsg" class="msg"></div>
+        <div class="row mt12">
+          <button id="joinBtn">Entrar e vincular</button>
+        </div>
+
+        <div class="row mt10">
+          <button id="backToLogin2" class="small" type="button">Voltar</button>
+        </div>
+
+        <div id="joinMsg" class="msg"></div>
+      </div>
     </div>
   </div>
 
@@ -43,6 +98,11 @@
       </div>
 
       <div id="appMsg" class="msg"></div>
+
+      <!-- mostra o uuidInv do inventário atual -->
+      <div class="muted" style="margin-top:6px;">
+        uuidInv desta casa: <span id="invUuid" class="pill" style="cursor:pointer;" title="Toque para copiar"></span>
+      </div>
 
       <div class="divider"></div>
 
@@ -102,18 +162,25 @@
       el.classList.toggle("error", !!isError);
     }
 
-    function overlay(on) {
-      $("overlay").classList.toggle("on", !!on);
-    }
+    function overlay(on) { $("overlay").classList.toggle("on", !!on); }
 
-    function showLogin() {
-      $("loginView").classList.remove("hidden");
+    function showAuth(mode = "login") {
       $("appView").classList.add("hidden");
-      $("loginView").classList.add("fade-in");
+      $("authView").classList.remove("hidden");
+      $("authView").classList.add("fade-in");
+
+      $("loginForm").classList.toggle("hidden", mode !== "login");
+      $("registerForm").classList.toggle("hidden", mode !== "register");
+      $("joinForm").classList.toggle("hidden", mode !== "join");
+
+      $("authTitle").textContent =
+        mode === "login" ? "Entrar" :
+        mode === "register" ? "Criar conta" :
+        "Vincular pelo uuidInv";
     }
 
     function showApp() {
-      $("loginView").classList.add("hidden");
+      $("authView").classList.add("hidden");
       $("appView").classList.remove("hidden");
       $("appView").classList.add("fade-in");
     }
@@ -128,12 +195,15 @@
     // Toggle do filtro
     let showOnlyNeeds = false;
 
-    // Local cache
-    const KEY = "home_inventory_v2";
-    const loadLocal = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-    const saveLocal = (arr) => localStorage.setItem(KEY, JSON.stringify(arr));
+    // Local cache (por inventário)
+    const KEY_PREFIX = "home_inventory_inv_";
+    const loadLocal = (invId) => {
+      try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; }
+      catch { return []; }
+    };
+    const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
 
-    let items = loadLocal();
+    let items = [];
     let saveTimer = null;
 
     async function getUser() {
@@ -141,12 +211,110 @@
       return user;
     }
 
-    // ========= REALTIME =========
-    let realtimeChannel = null;
+    async function getUserId() {
+      const u = await getUser();
+      return u?.id || null;
+    }
 
-    async function startRealtime() {
-      const user = await getUser();
-      if (!user) return;
+    async function ensureProfile(displayNameIfMissing = "Usuário") {
+      const uid = await getUserId();
+      if (!uid) return null;
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, current_inventory_id")
+        .eq("user_id", uid)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) return data;
+
+      const profile = {
+        user_id: uid,
+        display_name: displayNameIfMissing,
+        current_inventory_id: null
+      };
+
+      const { error: insErr } = await supabase.from("profiles").insert(profile);
+      if (insErr) throw insErr;
+
+      return profile;
+    }
+
+    async function setCurrentInventory(inventoryId) {
+      const uid = await getUserId();
+      if (!uid) return;
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ current_inventory_id: inventoryId })
+        .eq("user_id", uid);
+
+      if (error) throw error;
+    }
+
+    async function loadItemsFromInventory(inventoryId) {
+      const { data, error } = await supabase
+        .from("inventories")
+        .select("items")
+        .eq("id", inventoryId)
+        .single();
+
+      if (error) throw error;
+      return data?.items ?? [];
+    }
+
+    async function saveItemsToInventory(inventoryId, arr) {
+      const { error } = await supabase
+        .from("inventories")
+        .update({ items: arr, updated_at: new Date().toISOString() })
+        .eq("id", inventoryId);
+
+      if (error) throw error;
+    }
+
+    async function createInventoryAndJoin(invName) {
+      const uid = await getUserId();
+      if (!uid) throw new Error("Sem usuário.");
+
+      const { data: inv, error: invErr } = await supabase
+        .from("inventories")
+        .insert({ name: invName || "Inventário", created_by: uid })
+        .select("id")
+        .single();
+
+      if (invErr) throw invErr;
+
+      const { error: memErr } = await supabase
+        .from("inventory_members")
+        .insert({ inventory_id: inv.id, user_id: uid, role: "owner" });
+
+      if (memErr) throw memErr;
+
+      await setCurrentInventory(inv.id);
+      return inv.id; // uuidInv
+    }
+
+    async function joinInventoryByUuid(uuidInv) {
+      const uid = await getUserId();
+      if (!uid) throw new Error("Sem usuário.");
+
+      const { error: memErr } = await supabase
+        .from("inventory_members")
+        .insert({ inventory_id: uuidInv, user_id: uid, role: "member" });
+
+      if (memErr) throw memErr;
+
+      await setCurrentInventory(uuidInv);
+      return uuidInv;
+    }
+
+    // ========= REALTIME (por inventário) =========
+    let realtimeChannel = null;
+    let currentInventoryId = null;
+
+    async function startRealtime(inventoryId) {
+      if (!inventoryId) return;
 
       if (realtimeChannel) {
         await supabase.removeChannel(realtimeChannel);
@@ -154,30 +322,29 @@
       }
 
       realtimeChannel = supabase
-        .channel("inv-" + user.id)
+        .channel("inv-" + inventoryId)
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
-            table: "inventory",
-            filter: `user_id=eq.${user.id}`,
+            table: "inventories",
+            filter: `id=eq.${inventoryId}`,
           },
           async (payload) => {
             try {
               const newItems = payload?.new?.items;
               if (Array.isArray(newItems)) {
                 items = newItems;
-                saveLocal(items);
+                saveLocal(inventoryId, items);
                 render();
                 setMsg($("appMsg"), "Atualizado em tempo real ⚡");
               } else {
-                const cloud = await loadCloud();
+                const cloud = await loadItemsFromInventory(inventoryId);
                 if (cloud && Array.isArray(cloud)) {
                   items = cloud;
-                  saveLocal(items);
+                  saveLocal(inventoryId, items);
                   render();
-                  setMsg($("appMsg"), "Atualizado ⚡");
                 }
               }
             } catch (e) {
@@ -197,53 +364,12 @@
       }
     }
 
-    async function ensureRowExists() {
-      const user = await getUser();
-      if (!user) return;
-
-      const { error } = await supabase
-        .from("inventory")
-        .upsert(
-          { user_id: user.id, items: [], updated_at: new Date().toISOString() },
-          { onConflict: "user_id", ignoreDuplicates: true }
-        );
-
-      if (error) throw error;
-    }
-
-    async function loadCloud() {
-      const user = await getUser();
-      if (!user) return null;
-
-      const { data, error } = await supabase
-        .from("inventory")
-        .select("items")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data?.items ?? [];
-    }
-
-    async function saveCloud(arr) {
-      const user = await getUser();
-      if (!user) return;
-
-      const { error } = await supabase
-        .from("inventory")
-        .upsert({
-          user_id: user.id,
-          items: arr,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "user_id" });
-
-      if (error) throw error;
-    }
-
+    // Salva agora
     async function saveNow(arr) {
-      saveLocal(arr);
+      if (!currentInventoryId) return;
+      saveLocal(currentInventoryId, arr);
       try {
-        await saveCloud(arr);
+        await saveItemsToInventory(currentInventoryId, arr);
         setMsg($("appMsg"), "Salvo ✅");
       } catch (e) {
         console.error("Erro ao salvar no cloud:", e);
@@ -251,8 +377,10 @@
       }
     }
 
+    // Debounce para +/−
     function saveDebounced(arr) {
-      saveLocal(arr);
+      if (!currentInventoryId) return;
+      saveLocal(currentInventoryId, arr);
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => saveNow(arr), 250);
     }
@@ -368,12 +496,11 @@
       await saveNow(items);
     }
 
-    // Eventos
+    // ===== UI Events =====
     $("add").onclick = addItem;
     $("search").addEventListener("input", render);
     $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
 
-    // Toggle filtro (botão fica "ligado/desligado" por classe)
     $("filterList").onclick = () => {
       showOnlyNeeds = !showOnlyNeeds;
       $("filterList").classList.toggle("active", showOnlyNeeds);
@@ -415,77 +542,179 @@
       await saveNow(items);
     };
 
+    $("logoutBtn").onclick = async () => {
+      await stopRealtime();
+      await supabase.auth.signOut();
+      showAuth("login");
+      setMsg($("authMsg"), "Saiu.");
+    };
+
+    // copiar uuidInv ao toque
+    $("invUuid").onclick = async () => {
+      const t = $("invUuid").textContent || "";
+      if (!t) return;
+      try {
+        await navigator.clipboard.writeText(t);
+        setMsg($("appMsg"), "uuidInv copiado ✅");
+      } catch {
+        setMsg($("appMsg"), "Não consegui copiar (permissão do navegador).", true);
+      }
+    };
+
+    // ===== AUTH NAV =====
+    $("goRegister").onclick = () => showAuth("register");
+    $("goJoin").onclick = () => showAuth("join");
+    $("backToLogin1").onclick = () => showAuth("login");
+    $("backToLogin2").onclick = () => showAuth("login");
+
+    // ===== AUTH ACTIONS =====
+
     // LOGIN
     $("loginBtn").onclick = async () => {
-      setMsg($("loginMsg"), "");
-      const email = $("email").value.trim();
-      const password = $("pass").value;
+      setMsg($("authMsg"), "");
+      const email = $("loginEmail").value.trim();
+      const password = $("loginPass").value;
 
       overlay(true);
       try {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          setMsg($("loginMsg"), "Erro: " + error.message, true);
-          return;
-        }
+        if (error) { setMsg($("authMsg"), "Erro: " + error.message, true); return; }
 
-        showApp();
-        render();
-        setMsg($("appMsg"), "Sincronizando…");
-
-        await ensureRowExists();
-        const cloud = await loadCloud();
-        if (cloud && Array.isArray(cloud)) {
-          items = cloud;
-          saveLocal(items);
-        }
-        render();
-
-        await startRealtime();
-
-        setMsg($("appMsg"), "Sincronizado ✅");
+        await bootAfterAuth();
       } catch (e) {
         console.error(e);
-        setMsg($("loginMsg"), "Falha no login/sync. Veja Console (F12).", true);
-        showLogin();
+        setMsg($("authMsg"), "Falha no login. Veja Console (F12).", true);
       } finally {
         overlay(false);
       }
     };
 
-    $("logoutBtn").onclick = async () => {
-      await stopRealtime();
-      await supabase.auth.signOut();
-      showLogin();
-      setMsg($("loginMsg"), "Saiu.");
-    };
+    // REGISTER (cria conta + inventário)
+    $("registerBtn").onclick = async () => {
+      setMsg($("regMsg"), "");
+      const displayName = $("regName").value.trim();
+      const email = $("regEmail").value.trim();
+      const password = $("regPass").value;
+      const invName = $("regInvName").value.trim() || "Inventário da Casa";
 
-    // Boot
-    render();
-    const { data: { session } } = await supabase.auth.getSession();
+      if (!displayName) { setMsg($("regMsg"), "Informe seu nome.", true); return; }
+      if (!email) { setMsg($("regMsg"), "Informe seu email.", true); return; }
+      if (!password || password.length < 6) { setMsg($("regMsg"), "Senha precisa ter pelo menos 6 caracteres.", true); return; }
 
-    if (session?.user) {
-      showApp();
-      setMsg($("appMsg"), "Sincronizando…");
+      overlay(true);
       try {
-        await ensureRowExists();
-        const cloud = await loadCloud();
-        if (cloud && Array.isArray(cloud)) {
-          items = cloud;
-          saveLocal(items);
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) { setMsg($("regMsg"), "Erro: " + error.message, true); return; }
+
+        // algumas configs exigem confirmar email; tentamos seguir mesmo assim:
+        await ensureProfile(displayName);
+
+        // se o signUp já criou sessão, cria inventário agora
+        const user = await getUser();
+        if (!user) {
+          setMsg($("regMsg"), "Conta criada! Agora faça login (verifique o email se pedir confirmação).");
+          showAuth("login");
+          return;
         }
-        render();
 
-        await startRealtime();
-
-        setMsg($("appMsg"), "Sincronizado ✅");
+        const invId = await createInventoryAndJoin(invName);
+        setMsg($("regMsg"), "Conta criada ✅");
+        await bootAfterAuth(invId);
       } catch (e) {
         console.error(e);
-        setMsg($("appMsg"), "Sem acesso à tabela ou realtime. Veja Console (F12).", true);
+        setMsg($("regMsg"), "Falha no cadastro. Veja Console (F12).", true);
+      } finally {
+        overlay(false);
       }
-    } else {
-      showLogin();
+    };
+
+    // JOIN (login e vincula pelo uuidInv)
+    $("joinBtn").onclick = async () => {
+      setMsg($("joinMsg"), "");
+      const email = $("joinEmail").value.trim();
+      const password = $("joinPass").value;
+      const uuidInv = ($("joinUuid").value || "").trim();
+
+      if (!uuidInv) { setMsg($("joinMsg"), "Informe o uuidInv.", true); return; }
+
+      overlay(true);
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) { setMsg($("joinMsg"), "Erro: " + error.message, true); return; }
+
+        await ensureProfile("Usuário");
+        await joinInventoryByUuid(uuidInv);
+
+        await bootAfterAuth(uuidInv);
+      } catch (e) {
+        console.error(e);
+        setMsg($("joinMsg"), "Falha ao vincular. Confere o uuidInv e tente de novo.", true);
+      } finally {
+        overlay(false);
+      }
+    };
+
+    // ===== BOOT =====
+    async function bootAfterAuth(forceInventoryId = null) {
+      const user = await getUser();
+      if (!user) { showAuth("login"); return; }
+
+      // garante perfil
+      const profile = await ensureProfile("Usuário");
+
+      // decide inventário atual
+      let invId = forceInventoryId || profile?.current_inventory_id || null;
+
+      // se não tem inventário ainda, manda pra tela de "vincular"
+      if (!invId) {
+        showAuth("join");
+        setMsg($("joinMsg"), "Entre com o uuidInv para vincular seu usuário ao inventário da casa.", false);
+        return;
+      }
+
+      currentInventoryId = invId;
+      $("invUuid").textContent = invId;
+
+      // carrega do cache local (por inv)
+      items = loadLocal(invId) || [];
+      showApp();
+      render();
+
+      setMsg($("appMsg"), "Sincronizando…");
+
+      // carrega do cloud
+      try {
+        const cloud = await loadItemsFromInventory(invId);
+        if (Array.isArray(cloud)) {
+          items = cloud;
+          saveLocal(invId, items);
+        }
+        render();
+      } catch (e) {
+        console.error(e);
+        setMsg($("appMsg"), "Não consegui ler do cloud (permissão/RLS). Veja Console (F12).", true);
+      }
+
+      // realtime por inventário
+      await startRealtime(invId);
+
+      setMsg($("appMsg"), "Sincronizado ✅");
     }
+
+    // Boot inicial (sessão)
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        overlay(true);
+        try {
+          await bootAfterAuth();
+        } finally {
+          overlay(false);
+        }
+      } else {
+        showAuth("login");
+      }
+    })();
   </script>
 </body>
 </html>
