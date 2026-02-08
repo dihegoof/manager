@@ -284,6 +284,12 @@
 
     function stepFor(unit) { return unit === "un" ? 1 : 0.1; }
 
+    function needsBuy(it){
+      const qty = Number(it.qty ?? 0);
+      const min = Number(it.min_qty ?? 0);
+    return qty <= 0 || (min > 0 && qty <= min);
+}
+
     function render() {
       const q = norm($("search").value);
       const list = $("list");
@@ -306,7 +312,7 @@
         row.className = "item";
 
         const left = document.createElement("div");
-        const needs = (Number(it.qty) === 0) || (Number(it.min_qty) > 0 && Number(it.qty) <= Number(it.min_qty));
+        const needs = needsBuy(it);
           <div class="name">${it.name}</div>
           <div class="sub">
             ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
