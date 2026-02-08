@@ -8,17 +8,14 @@
 </head>
 
 <body>
+  <div id="overlay" class="overlay"><div class="spinner"></div></div>
 
-  <div id="overlay" class="overlay">
-    <div class="spinner"></div>
-  </div>
-
-  <!-- ===== AUTH (LOGIN / REGISTER / JOIN) ===== -->
+  <!-- ===== AUTH VIEW ===== -->
   <div id="authView" class="center-screen">
     <div class="card login-card">
       <h1 class="title" id="authTitle">Entrar</h1>
 
-      <!-- LOGIN FORM -->
+      <!-- LOGIN -->
       <div id="loginForm">
         <div class="row">
           <input id="loginEmail" placeholder="Email" autocomplete="username" />
@@ -26,19 +23,16 @@
         <div class="row mt10">
           <input id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" />
         </div>
+
         <div class="row mt12">
           <button id="loginBtn">Logar</button>
+          <button id="openRegisterBtn" class="small" type="button">Registrar</button>
         </div>
 
-        <div class="row mt10">
-          <button id="goRegister" class="small" type="button">Criar conta</button>
-          <button id="goJoin" class="small" type="button">Vincular pelo uuidInv</button>
-        </div>
-
-        <div id="authMsg" class="msg"></div>
+        <div id="loginMsg" class="msg"></div>
       </div>
 
-      <!-- REGISTER FORM -->
+      <!-- REGISTER -->
       <div id="registerForm" class="hidden">
         <div class="row">
           <input id="regName" placeholder="Seu nome" autocomplete="name" />
@@ -49,42 +43,24 @@
         <div class="row mt10">
           <input id="regPass" type="password" placeholder="Senha" autocomplete="new-password" />
         </div>
+
+        <div class="row mt10" style="align-items:center;">
+          <label style="display:flex; align-items:center; gap:10px; user-select:none;">
+            <input id="genInv" type="checkbox" checked />
+            Gerar inventário
+          </label>
+        </div>
+
         <div class="row mt10">
-          <input id="regInvName" placeholder="Nome do inventário (ex: Casa do Di)" />
+          <input id="invCode" placeholder="Código do inventário (6 letras/números)" autocomplete="off" disabled />
         </div>
 
         <div class="row mt12">
-          <button id="registerBtn">Criar conta e inventário</button>
-        </div>
-
-        <div class="row mt10">
-          <button id="backToLogin1" class="small" type="button">Voltar</button>
+          <button id="registerBtn">Criar conta</button>
+          <button id="backToLoginBtn" class="small" type="button">Voltar</button>
         </div>
 
         <div id="regMsg" class="msg"></div>
-      </div>
-
-      <!-- JOIN FORM -->
-      <div id="joinForm" class="hidden">
-        <div class="row">
-          <input id="joinEmail" placeholder="Email" autocomplete="username" />
-        </div>
-        <div class="row mt10">
-          <input id="joinPass" type="password" placeholder="Senha" autocomplete="current-password" />
-        </div>
-        <div class="row mt10">
-          <input id="joinUuid" placeholder="uuidInv (código da casa)" autocomplete="off" />
-        </div>
-
-        <div class="row mt12">
-          <button id="joinBtn">Entrar e vincular</button>
-        </div>
-
-        <div class="row mt10">
-          <button id="backToLogin2" class="small" type="button">Voltar</button>
-        </div>
-
-        <div id="joinMsg" class="msg"></div>
       </div>
     </div>
   </div>
@@ -99,9 +75,9 @@
 
       <div id="appMsg" class="msg"></div>
 
-      <!-- mostra o uuidInv do inventário atual -->
       <div class="muted" style="margin-top:6px;">
-        uuidInv desta casa: <span id="invUuid" class="pill" style="cursor:pointer;" title="Toque para copiar"></span>
+        Código do inventário:
+        <span id="invCodeShow" class="pill" style="cursor:pointer;" title="Toque para copiar"></span>
       </div>
 
       <div class="divider"></div>
@@ -161,22 +137,25 @@
       el.textContent = text || "";
       el.classList.toggle("error", !!isError);
     }
-
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
 
-    function showAuth(mode = "login") {
-      $("appView").classList.add("hidden");
+    function showLogin() {
+      $("authTitle").textContent = "Entrar";
+      $("loginForm").classList.remove("hidden");
+      $("registerForm").classList.add("hidden");
       $("authView").classList.remove("hidden");
+      $("appView").classList.add("hidden");
       $("authView").classList.add("fade-in");
+    }
 
-      $("loginForm").classList.toggle("hidden", mode !== "login");
-      $("registerForm").classList.toggle("hidden", mode !== "register");
-      $("joinForm").classList.toggle("hidden", mode !== "join");
-
-      $("authTitle").textContent =
-        mode === "login" ? "Entrar" :
-        mode === "register" ? "Criar conta" :
-        "Vincular pelo uuidInv";
+    function showRegister() {
+      $("authTitle").textContent = "Registrar";
+      $("loginForm").classList.add("hidden");
+      $("registerForm").classList.remove("hidden");
+      $("authView").classList.remove("hidden");
+      $("appView").classList.add("hidden");
+      $("registerForm").classList.add("fade-in");
+      syncRegisterUI();
     }
 
     function showApp() {
@@ -185,17 +164,15 @@
       $("appView").classList.add("fade-in");
     }
 
-    // Regra robusta "precisa comprar": qty 0 OU qty <= min (se min > 0)
+    // ===== regra "precisa comprar" =====
     function needsBuy(it) {
       const qty = Number(it.qty ?? 0);
       const min = Number(it.min_qty ?? 0);
       return qty <= 0 || (min > 0 && qty <= min);
     }
-
-    // Toggle do filtro
     let showOnlyNeeds = false;
 
-    // Local cache (por inventário)
+    // ===== local cache por inventário =====
     const KEY_PREFIX = "home_inventory_inv_";
     const loadLocal = (invId) => {
       try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; }
@@ -206,11 +183,25 @@
     let items = [];
     let saveTimer = null;
 
+    // ===== código curto =====
+    function makeInviteCode(len = 6) {
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let out = "";
+      for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+      return out;
+    }
+
+    function syncRegisterUI() {
+      const gen = $("genInv").checked;
+      $("invCode").disabled = gen;
+      if (gen) $("invCode").value = "";
+    }
+
+    // ===== supabase helpers =====
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser();
       return user;
     }
-
     async function getUserId() {
       const u = await getUser();
       return u?.id || null;
@@ -229,93 +220,101 @@
       if (error) throw error;
       if (data) return data;
 
-      const profile = {
-        user_id: uid,
-        display_name: displayNameIfMissing,
-        current_inventory_id: null
-      };
+      const { error: insErr } = await supabase
+        .from("profiles")
+        .insert({ user_id: uid, display_name: displayNameIfMissing, current_inventory_id: null });
 
-      const { error: insErr } = await supabase.from("profiles").insert(profile);
       if (insErr) throw insErr;
 
-      return profile;
+      return { user_id: uid, display_name: displayNameIfMissing, current_inventory_id: null };
     }
 
     async function setCurrentInventory(inventoryId) {
       const uid = await getUserId();
-      if (!uid) return;
-
       const { error } = await supabase
         .from("profiles")
         .update({ current_inventory_id: inventoryId })
         .eq("user_id", uid);
-
       if (error) throw error;
     }
 
-    async function loadItemsFromInventory(inventoryId) {
+    async function loadInventory(inventoryId) {
       const { data, error } = await supabase
         .from("inventories")
-        .select("items")
+        .select("items, invite_code")
         .eq("id", inventoryId)
         .single();
-
       if (error) throw error;
-      return data?.items ?? [];
+      return data;
     }
 
-    async function saveItemsToInventory(inventoryId, arr) {
+    async function saveInventoryItems(inventoryId, arr) {
       const { error } = await supabase
         .from("inventories")
         .update({ items: arr, updated_at: new Date().toISOString() })
         .eq("id", inventoryId);
-
       if (error) throw error;
     }
 
-    async function createInventoryAndJoin(invName) {
+    async function createInventoryWithInvite(invName) {
       const uid = await getUserId();
-      if (!uid) throw new Error("Sem usuário.");
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const invite_code = makeInviteCode(6);
 
-      const { data: inv, error: invErr } = await supabase
+        const { data: inv, error } = await supabase
+          .from("inventories")
+          .insert({ name: invName || "Inventário da Casa", created_by: uid, invite_code })
+          .select("id, invite_code")
+          .single();
+
+        if (!error) return inv;
+
+        // colisão do unique → tenta de novo
+        if ((error.message || "").toLowerCase().includes("duplicate")) continue;
+
+        throw error;
+      }
+      throw new Error("Não consegui gerar um código único. Tente novamente.");
+    }
+
+    async function joinByInviteCode(code) {
+      // busca o inventário pelo código curto
+      const { data, error } = await supabase
         .from("inventories")
-        .insert({ name: invName || "Inventário", created_by: uid })
         .select("id")
-        .single();
+        .eq("invite_code", code)
+        .maybeSingle();
 
-      if (invErr) throw invErr;
+      if (error) throw error;
+      if (!data?.id) throw new Error("Código do inventário não encontrado.");
 
-      const { error: memErr } = await supabase
-        .from("inventory_members")
-        .insert({ inventory_id: inv.id, user_id: uid, role: "owner" });
-
-      if (memErr) throw memErr;
-
-      await setCurrentInventory(inv.id);
-      return inv.id; // uuidInv
-    }
-
-    async function joinInventoryByUuid(uuidInv) {
       const uid = await getUserId();
-      if (!uid) throw new Error("Sem usuário.");
-
       const { error: memErr } = await supabase
         .from("inventory_members")
-        .insert({ inventory_id: uuidInv, user_id: uid, role: "member" });
+        .insert({ inventory_id: data.id, user_id: uid, role: "member" });
 
       if (memErr) throw memErr;
 
-      await setCurrentInventory(uuidInv);
-      return uuidInv;
+      await setCurrentInventory(data.id);
+      return data.id;
     }
 
-    // ========= REALTIME (por inventário) =========
+    async function ownInventory(inventoryId) {
+      const uid = await getUserId();
+      const { error: memErr } = await supabase
+        .from("inventory_members")
+        .insert({ inventory_id: inventoryId, user_id: uid, role: "owner" });
+
+      if (memErr) throw memErr;
+
+      await setCurrentInventory(inventoryId);
+    }
+
+    // ===== realtime =====
     let realtimeChannel = null;
     let currentInventoryId = null;
 
     async function startRealtime(inventoryId) {
-      if (!inventoryId) return;
-
       if (realtimeChannel) {
         await supabase.removeChannel(realtimeChannel);
         realtimeChannel = null;
@@ -323,35 +322,20 @@
 
       realtimeChannel = supabase
         .channel("inv-" + inventoryId)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "inventories",
-            filter: `id=eq.${inventoryId}`,
-          },
-          async (payload) => {
-            try {
-              const newItems = payload?.new?.items;
-              if (Array.isArray(newItems)) {
-                items = newItems;
-                saveLocal(inventoryId, items);
-                render();
-                setMsg($("appMsg"), "Atualizado em tempo real ⚡");
-              } else {
-                const cloud = await loadItemsFromInventory(inventoryId);
-                if (cloud && Array.isArray(cloud)) {
-                  items = cloud;
-                  saveLocal(inventoryId, items);
-                  render();
-                }
-              }
-            } catch (e) {
-              console.error("Realtime handler error:", e);
-            }
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "inventories",
+          filter: `id=eq.${inventoryId}`,
+        }, async (payload) => {
+          const newItems = payload?.new?.items;
+          if (Array.isArray(newItems)) {
+            items = newItems;
+            saveLocal(inventoryId, items);
+            render();
+            setMsg($("appMsg"), "Atualizado em tempo real ⚡");
           }
-        )
+        })
         .subscribe((status) => {
           if (status === "SUBSCRIBED") setMsg($("appMsg"), "Tempo real ativo ⚡");
         });
@@ -364,20 +348,18 @@
       }
     }
 
-    // Salva agora
     async function saveNow(arr) {
       if (!currentInventoryId) return;
       saveLocal(currentInventoryId, arr);
       try {
-        await saveItemsToInventory(currentInventoryId, arr);
+        await saveInventoryItems(currentInventoryId, arr);
         setMsg($("appMsg"), "Salvo ✅");
       } catch (e) {
-        console.error("Erro ao salvar no cloud:", e);
+        console.error(e);
         setMsg($("appMsg"), "Não salvou no cloud. Veja Console (F12).", true);
       }
     }
 
-    // Debounce para +/−
     function saveDebounced(arr) {
       if (!currentInventoryId) return;
       saveLocal(currentInventoryId, arr);
@@ -387,6 +369,7 @@
 
     function stepFor(unit) { return unit === "un" ? 1 : 0.1; }
 
+    // ===== render =====
     function render() {
       const q = norm($("search").value);
       const list = $("list");
@@ -403,9 +386,7 @@
       if (!filtered.length) {
         const empty = document.createElement("div");
         empty.className = "sub";
-        empty.textContent = showOnlyNeeds
-          ? "Nenhum item está marcado como “precisa comprar” 🙂"
-          : "Nada por aqui. Adicione itens acima 🙂";
+        empty.textContent = showOnlyNeeds ? "Nenhum item precisa comprar 🙂" : "Nada por aqui 🙂";
         list.appendChild(empty);
         return;
       }
@@ -496,7 +477,7 @@
       await saveNow(items);
     }
 
-    // ===== UI Events =====
+    // ===== app buttons =====
     $("add").onclick = addItem;
     $("search").addEventListener("input", render);
     $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
@@ -545,110 +526,95 @@
     $("logoutBtn").onclick = async () => {
       await stopRealtime();
       await supabase.auth.signOut();
-      showAuth("login");
-      setMsg($("authMsg"), "Saiu.");
+      showLogin();
+      setMsg($("loginMsg"), "Saiu.");
     };
 
-    // copiar uuidInv ao toque
-    $("invUuid").onclick = async () => {
-      const t = $("invUuid").textContent || "";
+    $("invCodeShow").onclick = async () => {
+      const t = $("invCodeShow").textContent || "";
       if (!t) return;
       try {
         await navigator.clipboard.writeText(t);
-        setMsg($("appMsg"), "uuidInv copiado ✅");
+        setMsg($("appMsg"), "Código copiado ✅");
       } catch {
-        setMsg($("appMsg"), "Não consegui copiar (permissão do navegador).", true);
+        setMsg($("appMsg"), "Não consegui copiar.", true);
       }
     };
 
-    // ===== AUTH NAV =====
-    $("goRegister").onclick = () => showAuth("register");
-    $("goJoin").onclick = () => showAuth("join");
-    $("backToLogin1").onclick = () => showAuth("login");
-    $("backToLogin2").onclick = () => showAuth("login");
+    // ===== auth ui events =====
+    $("openRegisterBtn").onclick = () => showRegister();
+    $("backToLoginBtn").onclick = () => showLogin();
+    $("genInv").addEventListener("change", syncRegisterUI);
 
-    // ===== AUTH ACTIONS =====
-
-    // LOGIN
+    // ===== LOGIN =====
     $("loginBtn").onclick = async () => {
-      setMsg($("authMsg"), "");
+      setMsg($("loginMsg"), "");
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
 
       overlay(true);
       try {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) { setMsg($("authMsg"), "Erro: " + error.message, true); return; }
-
+        if (error) { setMsg($("loginMsg"), "Erro: " + error.message, true); return; }
         await bootAfterAuth();
       } catch (e) {
         console.error(e);
-        setMsg($("authMsg"), "Falha no login. Veja Console (F12).", true);
+        setMsg($("loginMsg"), "Falha no login.", true);
       } finally {
         overlay(false);
       }
     };
 
-    // REGISTER (cria conta + inventário)
+    // ===== REGISTER =====
     $("registerBtn").onclick = async () => {
       setMsg($("regMsg"), "");
+
       const displayName = $("regName").value.trim();
       const email = $("regEmail").value.trim();
       const password = $("regPass").value;
-      const invName = $("regInvName").value.trim() || "Inventário da Casa";
+      const gen = $("genInv").checked;
+      const code = ($("invCode").value || "").trim().toUpperCase();
 
       if (!displayName) { setMsg($("regMsg"), "Informe seu nome.", true); return; }
       if (!email) { setMsg($("regMsg"), "Informe seu email.", true); return; }
-      if (!password || password.length < 6) { setMsg($("regMsg"), "Senha precisa ter pelo menos 6 caracteres.", true); return; }
+      if (!password || password.length < 6) { setMsg($("regMsg"), "Senha com pelo menos 6 caracteres.", true); return; }
+
+      // regra que você pediu: não deixa sem um dos dois
+      if (!gen && !code) {
+        setMsg($("regMsg"), "Desmarcou 'Gerar inventário'? Então informe o código do inventário.", true);
+        return;
+      }
 
       overlay(true);
       try {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) { setMsg($("regMsg"), "Erro: " + error.message, true); return; }
 
-        // algumas configs exigem confirmar email; tentamos seguir mesmo assim:
-        await ensureProfile(displayName);
-
-        // se o signUp já criou sessão, cria inventário agora
+        // se exigir confirmação de email, pode não haver sessão imediatamente
         const user = await getUser();
         if (!user) {
-          setMsg($("regMsg"), "Conta criada! Agora faça login (verifique o email se pedir confirmação).");
-          showAuth("login");
+          setMsg($("regMsg"), "Conta criada! Faça login (se pedir, confirme o email).");
+          showLogin();
           return;
         }
 
-        const invId = await createInventoryAndJoin(invName);
-        setMsg($("regMsg"), "Conta criada ✅");
+        await ensureProfile(displayName);
+
+        let invId;
+        if (gen) {
+          // cria inventário + owner
+          const inv = await createInventoryWithInvite("Inventário da Casa");
+          invId = inv.id;
+          await ownInventory(invId);
+        } else {
+          // entra pelo código curto
+          invId = await joinByInviteCode(code);
+        }
+
         await bootAfterAuth(invId);
       } catch (e) {
         console.error(e);
-        setMsg($("regMsg"), "Falha no cadastro. Veja Console (F12).", true);
-      } finally {
-        overlay(false);
-      }
-    };
-
-    // JOIN (login e vincula pelo uuidInv)
-    $("joinBtn").onclick = async () => {
-      setMsg($("joinMsg"), "");
-      const email = $("joinEmail").value.trim();
-      const password = $("joinPass").value;
-      const uuidInv = ($("joinUuid").value || "").trim();
-
-      if (!uuidInv) { setMsg($("joinMsg"), "Informe o uuidInv.", true); return; }
-
-      overlay(true);
-      try {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) { setMsg($("joinMsg"), "Erro: " + error.message, true); return; }
-
-        await ensureProfile("Usuário");
-        await joinInventoryByUuid(uuidInv);
-
-        await bootAfterAuth(uuidInv);
-      } catch (e) {
-        console.error(e);
-        setMsg($("joinMsg"), "Falha ao vincular. Confere o uuidInv e tente de novo.", true);
+        setMsg($("regMsg"), (e?.message || "Falha no registro."), true);
       } finally {
         overlay(false);
       }
@@ -657,62 +623,48 @@
     // ===== BOOT =====
     async function bootAfterAuth(forceInventoryId = null) {
       const user = await getUser();
-      if (!user) { showAuth("login"); return; }
+      if (!user) { showLogin(); return; }
 
-      // garante perfil
       const profile = await ensureProfile("Usuário");
-
-      // decide inventário atual
       let invId = forceInventoryId || profile?.current_inventory_id || null;
 
-      // se não tem inventário ainda, manda pra tela de "vincular"
       if (!invId) {
-        showAuth("join");
-        setMsg($("joinMsg"), "Entre com o uuidInv para vincular seu usuário ao inventário da casa.", false);
+        // usuário sem inventário: manda registrar (e escolher gerar/vincular)
+        showRegister();
+        setMsg($("regMsg"), "Para usar, você precisa gerar um inventário ou informar o código de um existente.", false);
         return;
       }
 
       currentInventoryId = invId;
-      $("invUuid").textContent = invId;
 
-      // carrega do cache local (por inv)
+      // cache local
       items = loadLocal(invId) || [];
       showApp();
       render();
-
       setMsg($("appMsg"), "Sincronizando…");
 
-      // carrega do cloud
-      try {
-        const cloud = await loadItemsFromInventory(invId);
-        if (Array.isArray(cloud)) {
-          items = cloud;
-          saveLocal(invId, items);
-        }
-        render();
-      } catch (e) {
-        console.error(e);
-        setMsg($("appMsg"), "Não consegui ler do cloud (permissão/RLS). Veja Console (F12).", true);
+      // cloud
+      const data = await loadInventory(invId);
+      if (Array.isArray(data?.items)) {
+        items = data.items;
+        saveLocal(invId, items);
       }
+      $("invCodeShow").textContent = data?.invite_code || "(sem código)";
+      render();
 
-      // realtime por inventário
       await startRealtime(invId);
-
       setMsg($("appMsg"), "Sincronizado ✅");
     }
 
-    // Boot inicial (sessão)
+    // ===== INIT =====
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         overlay(true);
-        try {
-          await bootAfterAuth();
-        } finally {
-          overlay(false);
-        }
+        try { await bootAfterAuth(); }
+        finally { overlay(false); }
       } else {
-        showAuth("login");
+        showLogin();
       }
     })();
   </script>
