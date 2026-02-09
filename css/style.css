@@ -9,21 +9,26 @@
   --line: rgba(15, 23, 42, 0.12);
 
   --primary: #7fc8ff;          /* azul bebê */
-  --primary-strong: #3aa9ff;   /* azul mais forte (p/ hover) */
+  --primary-strong: #3aa9ff;
   --primary-soft: rgba(127,200,255,.22);
 
-  --danger: #ff4d7d;
-  --danger-soft: rgba(255,77,125,.12);
+  --success: #16a34a;
+  --success-soft: rgba(22,163,74,.12);
+
+  --warn: #eab308;
+  --warn-soft: rgba(234,179,8,.16);
+
+  --danger: #ef4444;
+  --danger-soft: rgba(239,68,68,.12);
 
   --shadow: 0 10px 28px rgba(2, 10, 26, .08);
   --radius: 16px;
   --radius-sm: 12px;
-
   --tap: 44px;
 }
 
-/* ===== Layout base: footer sempre aparece (login e app) ===== */
-html, body{ height:100%; }
+/* ===== Layout base (footer sempre aparece) ===== */
+html, body { height:100%; }
 
 body{
   margin:0;
@@ -35,8 +40,8 @@ body{
   flex-direction: column;
 }
 
-/* views ocupam o espaço e empurram footer pro fim */
-#authView, #appView{ flex:1; }
+/* views ocupam espaço e empurram footer */
+#authView, #appView{ flex: 1; }
 
 /* util */
 .hidden{ display:none !important; }
@@ -46,110 +51,113 @@ body{
 
 .wrap{
   max-width: 860px;
-  margin:0 auto;
-  padding:16px;
+  margin: 0 auto;
+  padding: 16px;
 }
 
 .card{
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding:16px;
+  padding: 16px;
   box-shadow: var(--shadow);
 }
 
-h1,
+/* Títulos */
 .title{
-  margin:0 0 12px;
-  font-size:20px;
+  margin: 0 0 12px;
+  font-size: 20px;
   letter-spacing: .2px;
 }
 
-/* linhas */
 .row{
   display:flex;
   gap:10px;
   flex-wrap:wrap;
 }
 
-/* inputs e botões (touch friendly) */
+/* Inputs / selects / botões */
 input, select, button{
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: #ffffff;
   color: var(--text);
   padding: 12px;
-  font-size:14px;
-  outline:none;
+  font-size: 14px;
+  outline: none;
   min-height: var(--tap);
 }
 
 input{
-  flex:1;
-  min-width:180px;
+  flex: 1;
+  min-width: 180px;
 }
 
 select{
-  min-width:110px;
+  min-width: 110px;
   appearance: none;
 }
 
-/* botão padrão */
 button{
   cursor:pointer;
   background: var(--primary-soft);
-  border-color: rgba(127,200,255,.45);
+  border-color: rgba(127,200,255,.55);
   transition: transform .06s ease, background .15s ease, border-color .15s ease;
 }
 
 button:hover{
   background: rgba(127,200,255,.30);
-  border-color: rgba(58,169,255,.65);
+  border-color: rgba(58,169,255,.70);
 }
 
 button:active{
   transform: translateY(1px);
 }
 
-/* botões small */
 .small{
   padding: 8px 10px;
   font-size: 13px;
   min-height: 38px;
 }
 
-/* header */
+/* Header */
 .header-row{
   justify-content: space-between;
   align-items: center;
 }
 
-/* ✅ botão filtro ligado */
+/* Botão filtro ligado */
 #filterList.active{
-  background: rgba(127,200,255,.38);
-  border-color: rgba(58,169,255,.75);
+  background: rgba(127,200,255,.45);
+  border-color: rgba(58,169,255,.80);
 }
 
-/* textos auxiliares */
+/* Textos */
 .muted{
   color: var(--muted);
-  font-size:12px;
-  margin-top:8px;
+  font-size: 12px;
+  margin-top: 8px;
 }
 
+.divider{
+  height: 1px;
+  background: var(--line);
+  margin: 12px 0;
+}
+
+/* Lista */
 .list{
-  margin-top:14px;
+  margin-top: 14px;
   display:flex;
-  flex-direction:column;
-  gap:10px;
+  flex-direction: column;
+  gap: 10px;
 }
 
-/* item com cara de card */
 .item{
   display:flex;
   align-items:center;
-  justify-content:space-between;
-  gap:10px;
+  justify-content: space-between;
+  gap: 10px;
 
   padding: 12px;
   border-radius: 14px;
@@ -164,13 +172,13 @@ button:active{
 
 .sub{
   color: var(--muted);
-  font-size:12px;
+  font-size: 12px;
 }
 
 .controls{
   display:flex;
   align-items:center;
-  gap:8px;
+  gap: 8px;
 }
 
 .controls button{
@@ -178,10 +186,9 @@ button:active{
   padding: 10px 12px;
 }
 
-/* pill */
 .qty{
-  min-width:72px;
-  text-align:center;
+  min-width: 72px;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
@@ -189,141 +196,149 @@ button:active{
   padding: 6px 10px;
   border-radius: 999px;
   background: rgba(127,200,255,.20);
-  border: 1px solid rgba(127,200,255,.45);
+  border: 1px solid rgba(127,200,255,.55);
   font-size: 12px;
   color: #074064;
 }
 
-/* alerta */
+/* “precisa comprar” */
 .danger{
   background: var(--danger-soft);
-  border-color: rgba(255,77,125,.45);
-  color: #8a1233;
+  border-color: rgba(239,68,68,.45);
+  color: #7f1d1d;
 }
 
-.divider{
-  height:1px;
-  background: var(--line);
-  margin:12px 0;
-}
-
-/* ===== Login central (sem 100vh pra não sumir footer) ===== */
+/* ===== Login central ===== */
 .center-screen{
-  min-height: auto; /* importante */
+  min-height: auto;
   flex: 1;
   display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:16px;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
 }
 
 .login-card{
-  width:min(420px, 100%);
-  border-radius: var(--radius);
-  padding:16px;
+  width: min(420px, 100%);
 }
 
-/* mensagens (se quiser, pode até ocultar depois – toast já resolve) */
+/* ✅ Mensagens no DOM desativadas (usa só toast) */
 .msg{
-  margin-top:10px;
-  font-size:13px;
-  opacity:.9;
-  color: var(--muted);
-}
-
-.msg.error{
-  opacity:1;
-  color: #8a1233;
+  display:none;
 }
 
 /* ===== Overlay loading ===== */
 .overlay{
-  position:fixed;
-  inset:0;
+  position: fixed;
+  inset: 0;
   display:flex;
   align-items:center;
   justify-content:center;
   background: rgba(0,0,0,.20);
   backdrop-filter: blur(3px);
-  opacity:0;
-  pointer-events:none;
+  opacity: 0;
+  pointer-events: none;
   transition: opacity .18s ease;
   z-index: 9998;
 }
 
 .overlay.on{
-  opacity:1;
-  pointer-events:auto;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .spinner{
-  width:46px;
-  height:46px;
-  border-radius:999px;
-  border: 4px solid rgba(255,255,255,.45);
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 4px solid rgba(255,255,255,.55);
   border-top-color: rgba(58,169,255,.95);
   animation: spin .8s linear infinite;
 }
 
 @keyframes spin{
-  to { transform: rotate(360deg); }
+  to{ transform: rotate(360deg); }
 }
 
-/* transição leve */
+/* Transição */
 .fade-in{
   animation: fade .18s ease both;
 }
-
 @keyframes fade{
   from{ opacity:.2; transform: translateY(6px); }
   to{ opacity:1; transform:none; }
 }
 
-/* ===== TOAST (topo central, sobe devagar e some) ===== */
+/* ===== Toast balão (chat) ===== */
 .toast-container{
   position: fixed;
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
-  display: flex;
+  display:flex;
   flex-direction: column;
   gap: 10px;
   pointer-events: none;
 }
 
 .toast{
+  position: relative;
   pointer-events: none;
   max-width: min(92vw, 520px);
   padding: 12px 14px;
-  border-radius: 14px;
+  border-radius: 12px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.25;
 
   background: #ffffff;
-  border: 1px solid rgba(127,200,255,.55);
-  box-shadow: 0 12px 32px rgba(2, 10, 26, .10);
-
-  color: #0b1220;
-  font-size: 14px;
-  text-align: center;
+  border: 1px solid rgba(0,0,0,.12);
+  box-shadow: 0 12px 32px rgba(2, 10, 26, .12);
 
   opacity: 0;
   transform: translateY(-10px);
   animation: toast-in .22s ease forwards, toast-out .65s ease forwards;
-  animation-delay: 0s, 2.6s;
+  animation-delay: 0s, 2.8s;
+}
+
+/* rabinho do balão */
+.toast::after{
+  content:"";
+  position:absolute;
+  top:-6px;
+  left:18px;
+  width:12px;
+  height:12px;
+  transform: rotate(45deg);
+  background: inherit;
+  border-left: 1px solid rgba(0,0,0,.12);
+  border-top: 1px solid rgba(0,0,0,.12);
+}
+
+.toast.success{
+  background: #f0fdf4;
+  border-color: rgba(22,163,74,.35);
+  color: #0f3d1d;
 }
 
 .toast.error{
-  border-color: rgba(255,77,125,.55);
-  background: #fff7f9;
-  color: #8a1233;
+  background: #fff1f2;
+  border-color: rgba(239,68,68,.40);
+  color: #7f1d1d;
+}
+
+.toast.warn{
+  background: #fffbeb;
+  border-color: rgba(234,179,8,.45);
+  color: #6b4f00;
 }
 
 @keyframes toast-in{
-  to { opacity: 1; transform: translateY(0); }
+  to{ opacity:1; transform: translateY(0); }
 }
-
 @keyframes toast-out{
-  to { opacity: 0; transform: translateY(-22px); }
+  to{ opacity:0; transform: translateY(-22px); }
 }
 
 /* ===== Footer ===== */
@@ -339,25 +354,19 @@ button:active{
   color: rgba(58,169,255,.95);
   text-decoration: none;
 }
-
 .footer a:hover{
   text-decoration: underline;
 }
 
-/* ===== Responsivo (celular) ===== */
+/* ===== Responsivo (Chrome mobile) ===== */
 @media (max-width: 640px){
-
   .wrap{ padding: 12px; }
-
-  /* inputs e botões com largura total em mobile */
   input, select, button{ width: 100%; }
-
-  /* botão sair não virar gigante */
   .header-row button{ width: auto; }
 
-  /* linha do cadastro de item (detecta pelo #name) vira grid */
+  /* cadastro de itens vira grid no mobile (sem mexer HTML) */
   .row:has(#name){
-    display: grid;
+    display:grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
     align-items: stretch;
@@ -366,9 +375,9 @@ button:active{
   .row:has(#name) #name{ grid-column: 1 / -1; }
   .row:has(#name) #add{ grid-column: 1 / -1; }
 
-  /* linha de botões (detecta pelo #filterList) vira 2 colunas */
+  /* botões em grid 2 colunas */
   .row:has(#filterList){
-    display: grid;
+    display:grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
   }
@@ -386,7 +395,7 @@ button:active{
   .qty{ min-width: 60px; }
 }
 
-/* fallback pra navegadores que não suportam :has (apenas por segurança) */
+/* fallback se algum browser não suportar :has */
 @supports not selector(:has(*)){
   @media (max-width: 640px){
     .item{ flex-direction: column; align-items: stretch; }
