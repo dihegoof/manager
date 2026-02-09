@@ -121,7 +121,7 @@
     </div>
   </div>
 
-  <!-- ✅ FOOTER (aparece em todas as telas) -->
+  <!-- ✅ FOOTER -->
   <footer class="footer" id="footer"></footer>
 
   <script type="module">
@@ -139,46 +139,48 @@
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
 
-    // ===== TOAST =====
-    function toast(message, isError = false) {
+    /* ===== Toast (balão estilo chat) ===== */
+    function toast(message, type = "success") {
       const container = $("toastContainer");
       if (!container) return;
 
-      const t = document.createElement("div");
-      t.className = "toast" + (isError ? " error" : "");
-      t.textContent = message;
+      const el = document.createElement("div");
+      el.className = "toast " + (type || "success");
+      el.textContent = message;
 
-      container.appendChild(t);
-
-      // remove depois da animação
-      setTimeout(() => {
-        t.remove();
-      }, 3200);
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3600);
     }
 
-    // Mensagens amigáveis (Supabase/Auth)
     function humanizeAuthError(err) {
-      const msg = (err?.message || "").toLowerCase();
+      const msg = (err?.message || err || "").toString();
+      const m = msg.toLowerCase();
 
-      if (msg.includes("invalid login credentials")) return "Email ou senha inválidos.";
-      if (msg.includes("email not confirmed")) return "Confirme seu email antes de entrar.";
-      if (msg.includes("rate limit")) return "Muitas tentativas. Aguarde um pouco e tente novamente.";
-      if (msg.includes("user already registered")) return "Esse email já tem conta. Faça login.";
-      if (msg.includes("password should be at least")) return "A senha precisa ter pelo menos 6 caracteres.";
-      if (msg.includes("signup is disabled")) return "Cadastro está desativado no momento.";
-      if (msg.includes("invalid email")) return "Email inválido.";
-      if (msg.includes("weak password")) return "Senha fraca. Use uma senha mais forte.";
-      return err?.message || "Ocorreu um erro.";
+      if (m.includes("invalid login") || m.includes("invalid credentials"))
+        return { text: "Email ou senha inválidos.", type: "error" };
+
+      if (m.includes("email not confirmed"))
+        return { text: "Confirme seu email antes de entrar.", type: "warn" };
+
+      if (m.includes("rate limit"))
+        return { text: "Muitas tentativas. Aguarde um pouco e tente novamente.", type: "warn" };
+
+      if (m.includes("already registered") || m.includes("already exists") || m.includes("user already registered"))
+        return { text: "Esse email já possui conta. Faça login.", type: "warn" };
+
+      if (m.includes("password") && m.includes("least"))
+        return { text: "Senha precisa ter pelo menos 6 caracteres.", type: "warn" };
+
+      if (m.includes("invalid email"))
+        return { text: "Email inválido.", type: "warn" };
+
+      return { text: msg || "Ocorreu um erro.", type: "error" };
     }
 
-    // ✅ setMsg agora manda tudo pro TOAST (e opcionalmente preenche o texto do elemento)
-    function setMsg(el, text, isError = false) {
-      if (text) toast(text, isError);
-      // opcional: manter o texto no DOM (ajuda debug). Se quiser esconder depois, a gente zera via CSS.
-      if (el) {
-        el.textContent = text || "";
-        el.classList.toggle("error", !!isError);
-      }
+    // ✅ setMsg agora só usa TOAST
+    function setMsg(_el, text, isError = false) {
+      if (!text) return;
+      toast(text, isError ? "error" : "success");
     }
 
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
@@ -191,6 +193,7 @@
       $("appView").classList.add("hidden");
       $("authView").classList.add("fade-in");
     }
+
     function showRegister() {
       $("authTitle").textContent = "Registrar";
       $("loginForm").classList.add("hidden");
@@ -200,6 +203,7 @@
       syncRegisterUI();
       $("authView").classList.add("fade-in");
     }
+
     function showApp() {
       $("authView").classList.add("hidden");
       $("appView").classList.remove("hidden");
@@ -217,13 +221,10 @@
       return session?.user || null;
     }
 
-    // ===== pending (intenção do cadastro) =====
-    const PENDING_KEY = "pending_inv_setup_v2";
-    const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
-    const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
-    const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
+    /* =========================================================
+       INVENTORY + APP
+    ========================================================= */
 
-    // ===== inventory cloud =====
     async function loadInventory(inventoryId) {
       const { data, error } = await supabase
         .from("inventories")
@@ -242,12 +243,10 @@
       if (error) throw error;
     }
 
-    // ===== local cache por inventário =====
     const KEY_PREFIX = "home_inventory_inv_";
     const loadLocal = (invId) => { try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; } catch { return []; } };
     const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
 
-    // ===== app state =====
     let items = [];
     let saveTimer = null;
     let currentInventoryId = null;
@@ -327,10 +326,10 @@
       saveLocal(currentInventoryId, arr);
       try {
         await saveInventoryItems(currentInventoryId, arr);
-        setMsg($("appMsg"), "Salvo ✅");
+        toast("Salvo ✅", "success");
       } catch (e) {
         console.error(e);
-        setMsg($("appMsg"), "Não salvou no cloud.", true);
+        toast("Não salvou no cloud.", "error");
       }
     }
 
@@ -377,7 +376,6 @@
       await saveNow(items);
     }
 
-    // ===== realtime =====
     async function startRealtime(inventoryId) {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
       realtimeChannel = supabase
@@ -393,7 +391,7 @@
             items = newItems;
             saveLocal(inventoryId, items);
             render();
-            setMsg($("appMsg"), "Atualizado em tempo real ⚡");
+            toast("Atualizado ⚡", "success");
           }
         })
         .subscribe();
@@ -404,14 +402,13 @@
       realtimeChannel = null;
     }
 
-    // ===== boot =====
     async function bootToInventory(inventoryId) {
       currentInventoryId = inventoryId;
 
       items = loadLocal(inventoryId) || [];
       showApp();
       render();
-      setMsg($("appMsg"), "Sincronizando…");
+      toast("Sincronizando…", "warn");
 
       const data = await loadInventory(inventoryId);
       if (Array.isArray(data?.items)) {
@@ -422,78 +419,110 @@
       render();
 
       await startRealtime(inventoryId);
-      setMsg($("appMsg"), "Sincronizado ✅");
+      toast("Sincronizado ✅", "success");
     }
 
-    // ===== FINALIZA automaticamente (create/join) =====
-    async function finalizePendingSetupIfNeeded(sessionUser = null) {
-      const pending = getPendingSetup();
-      if (!pending) return false;
+    /* =========================================================
+       ✅ FINALIZAÇÃO PROFISSIONAL (SEM localStorage):
+       Usa user_metadata gravado no signUp.
+    ========================================================= */
 
+    async function finalizeSetupFromMetadata(sessionUser = null) {
       const user = sessionUser || await getSessionUser();
       if (!user) return false;
 
+      // Se o profile já tem inventário, segue normal
+      const { data: prof, error: profErr } = await supabase
+        .from("profiles")
+        .select("current_inventory_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (profErr) {
+        // se falhar, não mostra fallback (só erro)
+        toast("Erro ao ler seu perfil.", "error");
+        return true;
+      }
+
+      if (prof?.current_inventory_id) return false;
+
+      const md = user.user_metadata || {};
+      const mode = md.inv_mode; // "create" | "join"
+      const code = (md.inv_code || "").toString().trim().toUpperCase();
+      const displayName = (md.display_name || "Usuário").toString().trim();
+
+      // Se não tem metadata, não tem como completar automaticamente
+      if (!mode || (mode === "join" && !code)) return false;
+
       overlay(true);
       try {
-        const { error: pErr } = await supabase.from("profiles").upsert({
+        // garante profile com nome
+        const { error: upErr } = await supabase.from("profiles").upsert({
           user_id: user.id,
-          display_name: pending.displayName || "Usuário",
+          display_name: displayName
         });
-        if (pErr) throw new Error("Profile: " + pErr.message);
+        if (upErr) throw new Error(upErr.message);
 
         let inventoryId = null;
 
-        if (pending.mode === "create") {
+        if (mode === "create") {
           const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
             p_name: "Inventário da Casa",
-            p_display_name: pending.displayName || "Usuário",
+            p_display_name: displayName,
           });
-          if (error) throw new Error("RPC create: " + error.message);
+          if (error) throw new Error(error.message);
           inventoryId = data?.[0]?.inventory_id;
         } else {
           const { data, error } = await supabase.rpc("join_inventory_by_code", {
-            p_code: pending.code,
-            p_display_name: pending.displayName || "Usuário",
+            p_code: code,
+            p_display_name: displayName,
           });
-          if (error) throw new Error("RPC join: " + error.message);
+          if (error) throw new Error(error.message);
           inventoryId = data?.[0]?.inventory_id;
         }
 
         if (!inventoryId) throw new Error("Não consegui obter o inventário.");
 
-        clearPendingSetup();
+        // limpa metadata pra não ficar reexecutando
+        await supabase.auth.updateUser({ data: { inv_mode: null, inv_code: null } });
+
         await bootToInventory(inventoryId);
         return true;
       } catch (e) {
         console.error(e);
-        showRegister();
-        setMsg($("regMsg"), String(e?.message || e), true);
-        return false;
+        toast("Falha ao finalizar inventário: " + (e?.message || e), "error");
+        return true; // evita cair no fallback
       } finally {
         overlay(false);
       }
     }
 
-    // ===== UI =====
+    /* =========================================================
+       UI EVENTS
+    ========================================================= */
+
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
     // LOGIN
     $("loginBtn").onclick = async () => {
-      setMsg($("loginMsg"), "");
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
 
       overlay(true);
       try {
         const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) return setMsg($("loginMsg"), humanizeAuthError(error), true);
+        if (error) {
+          const h = humanizeAuthError(error);
+          toast(h.text, h.type);
+          return;
+        }
 
-        if (await finalizePendingSetupIfNeeded(signInData?.session?.user)) return;
+        // ✅ tenta finalizar automaticamente (create/join) se necessário
+        if (await finalizeSetupFromMetadata(signInData?.session?.user)) return;
 
         const user = signInData?.session?.user || await getSessionUser();
-
         const { data: prof, error: perr } = await supabase
           .from("profiles")
           .select("current_inventory_id")
@@ -505,12 +534,13 @@
         if (prof?.current_inventory_id) {
           await bootToInventory(prof.current_inventory_id);
         } else {
+          // se chegou aqui, é porque NÃO tem metadata e NÃO tem inventory
+          toast("Seu usuário não tem inventário vinculado. Vá em Registrar.", "warn");
           showRegister();
-          setMsg($("regMsg"), "Logado ✅ Agora gere um inventário ou informe um código.", false);
         }
       } catch (e) {
         console.error(e);
-        setMsg($("loginMsg"), "Falha no login.", true);
+        toast("Falha no login.", "error");
       } finally {
         overlay(false);
       }
@@ -518,48 +548,55 @@
 
     // REGISTER
     $("registerBtn").onclick = async () => {
-      setMsg($("regMsg"), "");
-
       const displayName = $("regName").value.trim();
       const email = $("regEmail").value.trim();
       const password = $("regPass").value;
       const gen = $("genInv").checked;
       const code = ($("invCode").value || "").trim().toUpperCase();
 
-      if (!displayName) return setMsg($("regMsg"), "Informe seu nome.", true);
-      if (!email) return setMsg($("regMsg"), "Informe seu email.", true);
-      if (!password || password.length < 6) return setMsg($("regMsg"), "Senha com pelo menos 6 caracteres.", true);
-      if (!gen && !code) return setMsg($("regMsg"), "Informe o código do inventário.", true);
-
-      setPendingSetup({ displayName, mode: gen ? "create" : "join", code: gen ? "" : code, createdAt: Date.now() });
+      if (!displayName) return toast("Informe seu nome.", "warn");
+      if (!email) return toast("Informe seu email.", "warn");
+      if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warn");
+      if (!gen && !code) return toast("Informe o código do inventário.", "warn");
 
       overlay(true);
       try {
+        // ✅ guarda intenção no user_metadata (PROFISSIONAL)
         const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: APP_URL },
+          options: {
+            emailRedirectTo: APP_URL,
+            data: {
+              display_name: displayName,
+              inv_mode: gen ? "create" : "join",
+              inv_code: gen ? null : code
+            }
+          },
         });
 
         if (signUpErr) {
-          clearPendingSetup();
-          return setMsg($("regMsg"), humanizeAuthError(signUpErr), true);
-        }
-
-        let user = signUpData?.session?.user || null;
-
-        if (!user) {
-          setMsg($("regMsg"), "Conta criada ✅ Confirme seu email para entrar automaticamente.", false);
-          showLogin();
-          setMsg($("loginMsg"), "Confirme seu email e faça login.", false);
+          const h = humanizeAuthError(signUpErr);
+          toast(h.text, h.type);
           return;
         }
 
-        const ok = await finalizePendingSetupIfNeeded(user);
-        if (!ok) return;
+        // Confirm email ON: sem session aqui -> avisa e volta login
+        const user = signUpData?.session?.user || null;
+        if (!user) {
+          toast("Conta criada ✅ Confirme seu email. Depois você entra direto no inventário.", "warn");
+          showLogin();
+          return;
+        }
+
+        // Confirm OFF: já finaliza na hora
+        if (await finalizeSetupFromMetadata(user)) return;
+
+        toast("Conta criada ✅ Faça login.", "success");
+        showLogin();
       } catch (e) {
         console.error(e);
-        setMsg($("regMsg"), String(e?.message || e), true);
+        toast(String(e?.message || e), "error");
       } finally {
         overlay(false);
       }
@@ -569,7 +606,7 @@
       await stopRealtime();
       await supabase.auth.signOut();
       showLogin();
-      setMsg($("loginMsg"), "Saiu.");
+      toast("Saiu.", "success");
     };
 
     $("invCodeShow").onclick = async () => {
@@ -577,9 +614,9 @@
       if (!t) return;
       try {
         await navigator.clipboard.writeText(t);
-        setMsg($("appMsg"), "Código copiado ✅");
+        toast("Código copiado ✅", "success");
       } catch {
-        setMsg($("appMsg"), "Não consegui copiar.", true);
+        toast("Não consegui copiar.", "error");
       }
     };
 
@@ -592,6 +629,7 @@
       $("filterList").classList.toggle("active", showOnlyNeeds);
       $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
       render();
+      toast(showOnlyNeeds ? "Filtro ativado" : "Mostrando tudo", "success");
     };
 
     $("export").onclick = () => {
@@ -602,7 +640,7 @@
       a.download = "inventario.json";
       a.click();
       URL.revokeObjectURL(url);
-      setMsg($("appMsg"), "Backup exportado ✅");
+      toast("Backup exportado ✅", "success");
     };
 
     $("import").onclick = async () => {
@@ -614,11 +652,11 @@
         if (!file) return;
         const text = await file.text();
         const data = JSON.parse(text);
-        if (!Array.isArray(data)) return setMsg($("appMsg"), "Arquivo inválido.", true);
+        if (!Array.isArray(data)) return toast("Arquivo inválido.", "error");
         items = data;
         render();
         await saveNow(items);
-        setMsg($("appMsg"), "Importado ✅");
+        toast("Importado ✅", "success");
       };
       inp.click();
     };
@@ -628,14 +666,15 @@
       items = [];
       render();
       await saveNow(items);
-      setMsg($("appMsg"), "Inventário zerado ✅");
+      toast("Inventário zerado ✅", "success");
     };
 
     // INIT
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        if (await finalizePendingSetupIfNeeded(session.user)) return;
+        // ✅ tenta finalizar automaticamente antes de qualquer fallback
+        if (await finalizeSetupFromMetadata(session.user)) return;
 
         overlay(true);
         try {
@@ -650,9 +689,14 @@
           if (prof?.current_inventory_id) {
             await bootToInventory(prof.current_inventory_id);
           } else {
+            // se chegou aqui, é usuário antigo sem inventário + sem metadata
+            toast("Seu usuário não tem inventário vinculado. Vá em Registrar.", "warn");
             showRegister();
-            setMsg($("regMsg"), "Logado ✅ Agora gere um inventário ou informe um código.", false);
           }
+        } catch (e) {
+          console.error(e);
+          toast("Falha ao iniciar sessão.", "error");
+          showLogin();
         } finally {
           overlay(false);
         }
@@ -661,14 +705,13 @@
       }
     })();
 
-    // FOOTER (ano + link github)
+    // FOOTER
     const footer = $("footer");
     if (footer) {
       footer.innerHTML =
         `© ${new Date().getFullYear()} 
-         <a href="https://github.com/Dihegoof" target="_blank" rel="noopener noreferrer">
-           Dihego Nunes
-         </a> — Todos os direitos reservados`;
+         <a href="https://github.com/Dihegoof" target="_blank" rel="noopener noreferrer">Dihego Nunes</a>
+         — Todos os direitos reservados`;
     }
   </script>
 </body>
