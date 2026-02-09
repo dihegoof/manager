@@ -8,11 +8,10 @@
 </head>
 
 <body>
-  <!-- Overlay loading -->
   <div id="overlay" class="overlay"><div class="spinner"></div></div>
 
   <!-- Toast host -->
-  <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+  <div id="toastHost" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
   <!-- ===== AUTH ===== -->
   <div id="authView" class="center-screen">
@@ -125,8 +124,6 @@
 
     const SUPABASE_URL = "https://xzcgwnifypiqqushxrcs.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_9Nx27f1V0IgMkMw6BdTwmQ_B96lf3wq";
-
-    // GitHub Pages base
     const APP_URL = "https://dihegoof.github.io/manager/";
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -138,22 +135,27 @@
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    // ===== Footer =====
+    // Footer
     $("footer").innerHTML = `© ${new Date().getFullYear()}
       <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
       — Todos os direitos reservados`;
 
-    // ===== Toast =====
+    // Toast
     function toast(message, type = "info") {
       const host = $("toastHost");
-      const el = document.createElement("div");
-      el.className = `toast ${type}`;
-      el.textContent = message || "";
-      host.appendChild(el);
+      const wrap = document.createElement("div");
+      wrap.className = `toast ${type}`;
 
-      requestAnimationFrame(() => el.classList.add("show"));
-      setTimeout(() => el.classList.add("hide"), 3200);
-      setTimeout(() => el.remove(), 3800);
+      const bubble = document.createElement("div");
+      bubble.className = "toast-bubble";
+      bubble.textContent = message || "";
+
+      wrap.appendChild(bubble);
+      host.appendChild(wrap);
+
+      requestAnimationFrame(() => wrap.classList.add("show"));
+      setTimeout(() => wrap.classList.add("hide"), 3200);
+      setTimeout(() => wrap.remove(), 3800);
     }
 
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
@@ -194,13 +196,13 @@
       return session?.user || null;
     }
 
-    // ===== pending setup (para confirmar email ON / fluxos interrompidos) =====
+    // pending setup
     const PENDING_KEY = "pending_inv_setup_v2";
     const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
     const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
     const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
 
-    // ===== Inventory Cloud =====
+    // inventory cloud
     async function loadInventory(inventoryId) {
       const { data, error } = await supabase
         .from("inventories")
@@ -219,12 +221,12 @@
       if (error) throw error;
     }
 
-    // ===== Local cache por inventário =====
+    // local cache by inventory
     const KEY_PREFIX = "home_inventory_inv_";
     const loadLocal = (invId) => { try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; } catch { return []; } };
     const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
 
-    // ===== State =====
+    // state
     let items = [];
     let saveTimer = null;
     let currentInventoryId = null;
@@ -354,7 +356,7 @@
       await saveNow(items);
     }
 
-    // ===== Realtime =====
+    // realtime
     async function startRealtime(inventoryId) {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
 
@@ -382,7 +384,6 @@
       realtimeChannel = null;
     }
 
-    // ===== Boot to inventory =====
     async function bootToInventory(inventoryId) {
       currentInventoryId = inventoryId;
 
@@ -390,7 +391,7 @@
       showApp();
       render();
 
-      const data = await loadInventory(inventoryId); // aqui é onde RLS costuma pegar
+      const data = await loadInventory(inventoryId);
       if (Array.isArray(data?.items)) {
         items = data.items;
         saveLocal(inventoryId, items);
@@ -402,7 +403,6 @@
       toast("Sincronizado ✅", "success");
     }
 
-    // ===== Finaliza pending setup (create/join) =====
     async function finalizePendingSetupIfNeeded(sessionUser = null) {
       const pending = getPendingSetup();
       if (!pending) return false;
@@ -411,7 +411,6 @@
       if (!user) return false;
 
       try {
-        // profile name
         const { error: pErr } = await supabase.from("profiles").upsert({
           user_id: user.id,
           display_name: pending.displayName || "Usuário",
@@ -437,25 +436,22 @@
         }
 
         if (!inventoryId) throw new Error("Não consegui obter o inventário.");
-
         clearPendingSetup();
         await bootToInventory(inventoryId);
         return true;
       } catch (e) {
         console.error(e);
         showRegister();
-        toast("Logado ✅ mas falhou o vínculo/criação: " + (e?.message || e), "warning");
-        return true; // já tratou UI
+        toast("Logado ✅ mas falhou vínculo/criação: " + (e?.message || e), "warning");
+        return true;
       }
     }
 
-    // ===== Boot from profile (com retry) =====
     async function bootFromProfileWithRetry(userId) {
       let lastErr = null;
 
       for (let i = 0; i < 4; i++) {
         try {
-          // tenta finalizar pending primeiro (se existir)
           if (await finalizePendingSetupIfNeeded({ id: userId })) return;
 
           const { data: prof, error } = await supabase
@@ -466,7 +462,6 @@
 
           if (error) throw error;
 
-          // se por qualquer motivo ficou sem inv, cria automaticamente (sem “mensagem chata”)
           if (!prof?.current_inventory_id) {
             const { data, error: rpcErr } = await supabase.rpc("create_inventory_and_set_profile", {
               p_name: "Inventário da Casa",
@@ -492,12 +487,12 @@
       throw lastErr || new Error("Falha ao iniciar.");
     }
 
-    // ===== UI Events =====
+    // UI events
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
-    // LOGIN: só autentica, boot acontece no onAuthStateChange
+    // login: só autentica
     $("loginBtn").onclick = async () => {
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
@@ -515,7 +510,7 @@
       }
     };
 
-    // REGISTER
+    // register
     $("registerBtn").onclick = async () => {
       const displayName = $("regName").value.trim();
       const email = $("regEmail").value.trim();
@@ -548,8 +543,6 @@
           return toast(error.message, "error");
         }
 
-        // Se confirm email estiver OFF, vem session e o onAuthStateChange vai bootar.
-        // Se estiver ON, ele pede confirmação (mas você está com confirm OFF agora).
         if (!data?.session?.user) {
           toast("Conta criada ✅ Confirme o email e depois faça login.", "info");
           showLogin();
@@ -557,7 +550,6 @@
         }
 
         toast("Conta criada ✅", "success");
-        // onAuthStateChange vai finalizar e entrar
       } catch (e) {
         console.error(e);
         toast("Falha no cadastro.", "error");
@@ -634,7 +626,7 @@
       toast("Zerado ✅", "success");
     };
 
-    // ===== AUTH SOURCE OF TRUTH =====
+    // auth source of truth
     let booting = false;
 
     supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -651,7 +643,6 @@
         await bootFromProfileWithRetry(session.user.id);
       } catch (e) {
         console.error(e);
-        // NÃO chamar de “falha no login”: você está logado.
         showRegister();
         toast("Logado ✅ mas falhou ao sincronizar: " + (e?.message || e), "warning");
       } finally {
@@ -660,7 +651,7 @@
       }
     });
 
-    // First paint
+    // first paint
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) showLogin();
