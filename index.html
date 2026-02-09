@@ -10,6 +10,9 @@
 <body>
   <div id="overlay" class="overlay"><div class="spinner"></div></div>
 
+  <!-- ✅ TOASTS -->
+  <div id="toastContainer" class="toast-container"></div>
+
   <div id="authView" class="center-screen">
     <div class="card login-card">
       <h1 class="title" id="authTitle">Entrar</h1>
@@ -118,6 +121,9 @@
     </div>
   </div>
 
+  <!-- ✅ FOOTER (aparece em todas as telas) -->
+  <footer class="footer" id="footer"></footer>
+
   <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
@@ -133,10 +139,48 @@
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
 
-    function setMsg(el, text, isError = false) {
-      el.textContent = text || "";
-      el.classList.toggle("error", !!isError);
+    // ===== TOAST =====
+    function toast(message, isError = false) {
+      const container = $("toastContainer");
+      if (!container) return;
+
+      const t = document.createElement("div");
+      t.className = "toast" + (isError ? " error" : "");
+      t.textContent = message;
+
+      container.appendChild(t);
+
+      // remove depois da animação
+      setTimeout(() => {
+        t.remove();
+      }, 3200);
     }
+
+    // Mensagens amigáveis (Supabase/Auth)
+    function humanizeAuthError(err) {
+      const msg = (err?.message || "").toLowerCase();
+
+      if (msg.includes("invalid login credentials")) return "Email ou senha inválidos.";
+      if (msg.includes("email not confirmed")) return "Confirme seu email antes de entrar.";
+      if (msg.includes("rate limit")) return "Muitas tentativas. Aguarde um pouco e tente novamente.";
+      if (msg.includes("user already registered")) return "Esse email já tem conta. Faça login.";
+      if (msg.includes("password should be at least")) return "A senha precisa ter pelo menos 6 caracteres.";
+      if (msg.includes("signup is disabled")) return "Cadastro está desativado no momento.";
+      if (msg.includes("invalid email")) return "Email inválido.";
+      if (msg.includes("weak password")) return "Senha fraca. Use uma senha mais forte.";
+      return err?.message || "Ocorreu um erro.";
+    }
+
+    // ✅ setMsg agora manda tudo pro TOAST (e opcionalmente preenche o texto do elemento)
+    function setMsg(el, text, isError = false) {
+      if (text) toast(text, isError);
+      // opcional: manter o texto no DOM (ajuda debug). Se quiser esconder depois, a gente zera via CSS.
+      if (el) {
+        el.textContent = text || "";
+        el.classList.toggle("error", !!isError);
+      }
+    }
+
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
 
     function showLogin() {
@@ -286,7 +330,7 @@
         setMsg($("appMsg"), "Salvo ✅");
       } catch (e) {
         console.error(e);
-        setMsg($("appMsg"), "Não salvou no cloud. Veja Console (F12).", true);
+        setMsg($("appMsg"), "Não salvou no cloud.", true);
       }
     }
 
@@ -391,7 +435,6 @@
 
       overlay(true);
       try {
-        // profile
         const { error: pErr } = await supabase.from("profiles").upsert({
           user_id: user.id,
           display_name: pending.displayName || "Usuário",
@@ -416,7 +459,7 @@
           inventoryId = data?.[0]?.inventory_id;
         }
 
-        if (!inventoryId) throw new Error("RPC não retornou inventory_id.");
+        if (!inventoryId) throw new Error("Não consegui obter o inventário.");
 
         clearPendingSetup();
         await bootToInventory(inventoryId);
@@ -445,9 +488,8 @@
       overlay(true);
       try {
         const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) return setMsg($("loginMsg"), "Erro: " + error.message, true);
+        if (error) return setMsg($("loginMsg"), humanizeAuthError(error), true);
 
-        // se tiver pending (cadastro com confirm ON, ou fluxo interrompido), finaliza primeiro
         if (await finalizePendingSetupIfNeeded(signInData?.session?.user)) return;
 
         const user = signInData?.session?.user || await getSessionUser();
@@ -489,17 +531,10 @@
       if (!password || password.length < 6) return setMsg($("regMsg"), "Senha com pelo menos 6 caracteres.", true);
       if (!gen && !code) return setMsg($("regMsg"), "Informe o código do inventário.", true);
 
-      // salva intenção do inventário (para finalizar automaticamente)
-      setPendingSetup({
-        displayName,
-        mode: gen ? "create" : "join",
-        code: gen ? "" : code,
-        createdAt: Date.now(),
-      });
+      setPendingSetup({ displayName, mode: gen ? "create" : "join", code: gen ? "" : code, createdAt: Date.now() });
 
       overlay(true);
       try {
-        // signUp
         const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
           email,
           password,
@@ -508,23 +543,20 @@
 
         if (signUpErr) {
           clearPendingSetup();
-          return setMsg($("regMsg"), "Erro: " + signUpErr.message, true);
+          return setMsg($("regMsg"), humanizeAuthError(signUpErr), true);
         }
 
-        // Confirm OFF: pode vir session já no signUp
         let user = signUpData?.session?.user || null;
 
-        // Se não veio session (Confirm ON ou alguma config), manda confirmar e pronto
         if (!user) {
-          setMsg($("regMsg"), "Conta criada ✅ Confirme o email e você vai entrar direto no inventário.", false);
+          setMsg($("regMsg"), "Conta criada ✅ Confirme seu email para entrar automaticamente.", false);
           showLogin();
-          setMsg($("loginMsg"), "Confirme o email e depois faça login (se não entrar sozinho).", false);
+          setMsg($("loginMsg"), "Confirme seu email e faça login.", false);
           return;
         }
 
-        // Confirm OFF: finaliza imediatamente
         const ok = await finalizePendingSetupIfNeeded(user);
-        if (!ok) return; // erro real já aparece em regMsg
+        if (!ok) return;
       } catch (e) {
         console.error(e);
         setMsg($("regMsg"), String(e?.message || e), true);
@@ -570,6 +602,7 @@
       a.download = "inventario.json";
       a.click();
       URL.revokeObjectURL(url);
+      setMsg($("appMsg"), "Backup exportado ✅");
     };
 
     $("import").onclick = async () => {
@@ -581,10 +614,11 @@
         if (!file) return;
         const text = await file.text();
         const data = JSON.parse(text);
-        if (!Array.isArray(data)) return;
+        if (!Array.isArray(data)) return setMsg($("appMsg"), "Arquivo inválido.", true);
         items = data;
         render();
         await saveNow(items);
+        setMsg($("appMsg"), "Importado ✅");
       };
       inp.click();
     };
@@ -594,13 +628,13 @@
       items = [];
       render();
       await saveNow(items);
+      setMsg($("appMsg"), "Inventário zerado ✅");
     };
 
     // INIT
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Se tem pending, finaliza primeiro
         if (await finalizePendingSetupIfNeeded(session.user)) return;
 
         overlay(true);
@@ -626,11 +660,16 @@
         showLogin();
       }
     })();
-document.getElementById("footer").innerHTML =
-  `© ${new Date().getFullYear()} 
-   <a href="https://github.com/Dihegoof" target="_blank">
-     Dihego Nunes
-   </a> — Todos os direitos reservados`;
+
+    // FOOTER (ano + link github)
+    const footer = $("footer");
+    if (footer) {
+      footer.innerHTML =
+        `© ${new Date().getFullYear()} 
+         <a href="https://github.com/Dihegoof" target="_blank" rel="noopener noreferrer">
+           Dihego Nunes
+         </a> — Todos os direitos reservados`;
+    }
   </script>
 </body>
 </html>
