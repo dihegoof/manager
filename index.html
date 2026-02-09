@@ -123,16 +123,10 @@
 
     const SUPABASE_URL = "https://xzcgwnifypiqqushxrcs.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_9Nx27f1V0IgMkMw6BdTwmQ_B96lf3wq";
-
-    // GitHub Pages do seu app (fixo)
     const APP_URL = "https://dihegoof.github.io/manager/";
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
     const $ = (id) => document.getElementById(id);
@@ -160,6 +154,7 @@
       $("authView").classList.remove("hidden");
       $("appView").classList.add("hidden");
       syncRegisterUI();
+      $("authView").classList.add("fade-in");
     }
     function showApp() {
       $("authView").classList.add("hidden");
@@ -173,26 +168,18 @@
       if (gen) $("invCode").value = "";
     }
 
-    function makeInviteCode(len = 6) {
-      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      let out = "";
-      for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-      return out;
+    async function getSessionUser() {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.user || null;
     }
 
-    async function getUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      return user;
-    }
-
-    // ===== pending setup (para Confirm Email ON) =====
+    // ===== pending (intenção do cadastro) =====
     const PENDING_KEY = "pending_inv_setup_v2";
+    const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
+    const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
+    const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
 
-    function setPendingSetup(obj) { localStorage.setItem(PENDING_KEY, JSON.stringify(obj)); }
-    function getPendingSetup() { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } }
-    function clearPendingSetup() { localStorage.removeItem(PENDING_KEY); }
-
-    // ===== inventory load/save (cloud) =====
+    // ===== inventory cloud =====
     async function loadInventory(inventoryId) {
       const { data, error } = await supabase
         .from("inventories")
@@ -202,6 +189,7 @@
       if (error) throw error;
       return data;
     }
+
     async function saveInventoryItems(inventoryId, arr) {
       const { error } = await supabase
         .from("inventories")
@@ -347,11 +335,7 @@
 
     // ===== realtime =====
     async function startRealtime(inventoryId) {
-      if (realtimeChannel) {
-        await supabase.removeChannel(realtimeChannel);
-        realtimeChannel = null;
-      }
-
+      if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
       realtimeChannel = supabase
         .channel("inv-" + inventoryId)
         .on("postgres_changes", {
@@ -372,10 +356,8 @@
     }
 
     async function stopRealtime() {
-      if (realtimeChannel) {
-        await supabase.removeChannel(realtimeChannel);
-        realtimeChannel = null;
-      }
+      if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
     }
 
     // ===== boot =====
@@ -399,60 +381,62 @@
       setMsg($("appMsg"), "Sincronizado ✅");
     }
 
-    // ===== finalize pending setup =====
-    async function finalizePendingSetupIfNeeded() {
-  const pending = getPendingSetup();
-  if (!pending) return false;
+    // ===== FINALIZA automaticamente (create/join) =====
+    async function finalizePendingSetupIfNeeded(sessionUser = null) {
+      const pending = getPendingSetup();
+      if (!pending) return false;
 
-  const user = await getUser();
-  if (!user) return false;
+      const user = sessionUser || await getSessionUser();
+      if (!user) return false;
 
-  overlay(true);
-  try {
-    // profile
-    const { error: pErr } = await supabase.from("profiles").upsert({
-      user_id: user.id,
-      display_name: pending.displayName || "Usuário",
-    });
-    if (pErr) throw new Error("Profile: " + pErr.message);
+      overlay(true);
+      try {
+        // profile
+        const { error: pErr } = await supabase.from("profiles").upsert({
+          user_id: user.id,
+          display_name: pending.displayName || "Usuário",
+        });
+        if (pErr) throw new Error("Profile: " + pErr.message);
 
-    let inventoryId = null;
+        let inventoryId = null;
 
-    if (pending.mode === "create") {
-      const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
-        p_name: "Inventário da Casa",
-        p_display_name: pending.displayName || "Usuário",
-      });
-      if (error) throw new Error("RPC create: " + error.message);
-      inventoryId = data?.[0]?.inventory_id;
-    } else if (pending.mode === "join") {
-      const { data, error } = await supabase.rpc("join_inventory_by_code", {
-        p_code: pending.code,
-        p_display_name: pending.displayName || "Usuário",
-      });
-      if (error) throw new Error("RPC join: " + error.message);
-      inventoryId = data?.[0]?.inventory_id;
+        if (pending.mode === "create") {
+          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
+            p_name: "Inventário da Casa",
+            p_display_name: pending.displayName || "Usuário",
+          });
+          if (error) throw new Error("RPC create: " + error.message);
+          inventoryId = data?.[0]?.inventory_id;
+        } else {
+          const { data, error } = await supabase.rpc("join_inventory_by_code", {
+            p_code: pending.code,
+            p_display_name: pending.displayName || "Usuário",
+          });
+          if (error) throw new Error("RPC join: " + error.message);
+          inventoryId = data?.[0]?.inventory_id;
+        }
+
+        if (!inventoryId) throw new Error("RPC não retornou inventory_id.");
+
+        clearPendingSetup();
+        await bootToInventory(inventoryId);
+        return true;
+      } catch (e) {
+        console.error(e);
+        showRegister();
+        setMsg($("regMsg"), String(e?.message || e), true);
+        return false;
+      } finally {
+        overlay(false);
+      }
     }
 
-    if (!inventoryId) throw new Error("Sem inventoryId (RPC não retornou).");
-
-    clearPendingSetup();
-    await bootToInventory(inventoryId);
-    return true;
-  } catch (e) {
-    console.error(e);
-    showRegister();
-    setMsg($("regMsg"), String(e?.message || e), true); // <-- agora mostra o erro real
-    return false;
-  } finally {
-    overlay(false);
-  }
-}
-    // ===== UI events =====
+    // ===== UI =====
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
+    // LOGIN
     $("loginBtn").onclick = async () => {
       setMsg($("loginMsg"), "");
       const email = $("loginEmail").value.trim();
@@ -460,13 +444,13 @@
 
       overlay(true);
       try {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return setMsg($("loginMsg"), "Erro: " + error.message, true);
 
-        // tenta finalizar pending (caso exista)
-        if (await finalizePendingSetupIfNeeded()) return;
+        // se tiver pending (cadastro com confirm ON, ou fluxo interrompido), finaliza primeiro
+        if (await finalizePendingSetupIfNeeded(signInData?.session?.user)) return;
 
-        const user = await getUser();
+        const user = signInData?.session?.user || await getSessionUser();
 
         const { data: prof, error: perr } = await supabase
           .from("profiles")
@@ -476,13 +460,12 @@
 
         if (perr) throw perr;
 
-        if (!prof?.current_inventory_id) {
+        if (prof?.current_inventory_id) {
+          await bootToInventory(prof.current_inventory_id);
+        } else {
           showRegister();
           setMsg($("regMsg"), "Logado ✅ Agora gere um inventário ou informe um código.", false);
-          return;
         }
-
-        await bootToInventory(prof.current_inventory_id);
       } catch (e) {
         console.error(e);
         setMsg($("loginMsg"), "Falha no login.", true);
@@ -506,48 +489,45 @@
       if (!password || password.length < 6) return setMsg($("regMsg"), "Senha com pelo menos 6 caracteres.", true);
       if (!gen && !code) return setMsg($("regMsg"), "Informe o código do inventário.", true);
 
+      // salva intenção do inventário (para finalizar automaticamente)
+      setPendingSetup({
+        displayName,
+        mode: gen ? "create" : "join",
+        code: gen ? "" : code,
+        createdAt: Date.now(),
+      });
+
       overlay(true);
       try {
-        // salva intenção (serve tanto pra Confirm ON quanto OFF)
-        setPendingSetup({
-          displayName,
-          mode: gen ? "create" : "join",
-          code: gen ? "" : code,
-          createdAt: Date.now()
-        });
-
-        const { error: signUpErr } = await supabase.auth.signUp({
+        // signUp
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: APP_URL }
+          options: { emailRedirectTo: APP_URL },
         });
 
         if (signUpErr) {
           clearPendingSetup();
-          const msg = (signUpErr.message || "").toLowerCase();
-          if (msg.includes("already") || msg.includes("exists") || msg.includes("registered")) {
-            setMsg($("regMsg"), "Esse email já tem conta. Volte e faça login.", true);
-            showLogin();
-            return;
-          }
           return setMsg($("regMsg"), "Erro: " + signUpErr.message, true);
         }
 
-        // Como você desligou Confirm Email, deve logar e finalizar agora
-        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInErr) {
-          setMsg($("regMsg"), "Conta criada ✅ Agora faça login.", false);
+        // Confirm OFF: pode vir session já no signUp
+        let user = signUpData?.session?.user || null;
+
+        // Se não veio session (Confirm ON ou alguma config), manda confirmar e pronto
+        if (!user) {
+          setMsg($("regMsg"), "Conta criada ✅ Confirme o email e você vai entrar direto no inventário.", false);
           showLogin();
+          setMsg($("loginMsg"), "Confirme o email e depois faça login (se não entrar sozinho).", false);
           return;
         }
 
-        if (!(await finalizePendingSetupIfNeeded())) {
-          showRegister();
-          setMsg($("regMsg"), "Logado ✅ Mas não consegui finalizar o inventário automaticamente.", true);
-        }
+        // Confirm OFF: finaliza imediatamente
+        const ok = await finalizePendingSetupIfNeeded(user);
+        if (!ok) return; // erro real já aparece em regMsg
       } catch (e) {
         console.error(e);
-        setMsg($("regMsg"), e?.message || "Falha no registro.", true);
+        setMsg($("regMsg"), String(e?.message || e), true);
       } finally {
         overlay(false);
       }
@@ -616,22 +596,22 @@
       await saveNow(items);
     };
 
-    // init
+    // INIT
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
-
       if (session?.user) {
-        // se tiver pending, tenta finalizar primeiro
-        if (await finalizePendingSetupIfNeeded()) return;
+        // Se tem pending, finaliza primeiro
+        if (await finalizePendingSetupIfNeeded(session.user)) return;
 
         overlay(true);
         try {
-          const user = await getUser();
-          const { data: prof } = await supabase
+          const { data: prof, error } = await supabase
             .from("profiles")
             .select("current_inventory_id")
-            .eq("user_id", user.id)
+            .eq("user_id", session.user.id)
             .maybeSingle();
+
+          if (error) throw error;
 
           if (prof?.current_inventory_id) {
             await bootToInventory(prof.current_inventory_id);
@@ -649,4 +629,3 @@
   </script>
 </body>
 </html>
-```0
