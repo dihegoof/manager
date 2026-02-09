@@ -8,12 +8,13 @@
 </head>
 
 <body>
+  <!-- Overlay loading -->
   <div id="overlay" class="overlay"><div class="spinner"></div></div>
 
-  <!-- TOASTS -->
-  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <!-- Toast host -->
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- AUTH -->
+  <!-- ===== AUTH ===== -->
   <div id="authView" class="center-screen">
     <div class="card login-card">
       <h1 class="title" id="authTitle">Entrar</h1>
@@ -27,7 +28,7 @@
           <input id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" />
         </div>
 
-        <div class="row mt12 actions">
+        <div class="row mt12">
           <button id="loginBtn">Logar</button>
           <button id="openRegisterBtn" class="small" type="button">Registrar</button>
         </div>
@@ -46,7 +47,7 @@
         </div>
 
         <div class="row mt10" style="align-items:center;">
-          <label class="checkline">
+          <label style="display:flex; align-items:center; gap:10px; user-select:none;">
             <input id="genInv" type="checkbox" checked />
             Gerar inventário
           </label>
@@ -56,7 +57,7 @@
           <input id="invCode" placeholder="Código do inventário (6 letras/números)" autocomplete="off" disabled />
         </div>
 
-        <div class="row mt12 actions">
+        <div class="row mt12">
           <button id="registerBtn">Criar conta</button>
           <button id="backToLoginBtn" class="small" type="button">Voltar</button>
         </div>
@@ -64,7 +65,7 @@
     </div>
   </div>
 
-  <!-- APP -->
+  <!-- ===== APP ===== -->
   <div id="appView" class="wrap hidden">
     <div class="card">
       <div class="row header-row">
@@ -74,7 +75,7 @@
 
       <div class="muted" style="margin-top:6px;">
         Código do inventário:
-        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
+        <span id="invCodeShow" class="pill" style="cursor:pointer;" title="Toque para copiar"></span>
       </div>
 
       <div class="divider"></div>
@@ -105,7 +106,7 @@
 
       <div class="divider"></div>
 
-      <div class="row actions">
+      <div class="row">
         <button class="small" id="filterList">Filtrar lista</button>
         <button class="small" id="export">Exportar (backup)</button>
         <button class="small" id="import">Importar</button>
@@ -113,41 +114,19 @@
       </div>
 
       <div class="list" id="list"></div>
-
-      <!-- MEMBERS -->
-      <div class="divider"></div>
-
-      <div class="members-card">
-        <div class="row members-header">
-          <div>
-            <div class="members-title">Membros do inventário</div>
-            <div class="members-sub">Quem tem acesso a este inventário</div>
-          </div>
-
-          <div class="row" style="gap:8px;">
-            <button id="membersRefresh" class="small" type="button">Atualizar</button>
-          </div>
-        </div>
-
-        <div id="membersList" class="members-list">
-          <div class="members-empty">Carregando…</div>
-        </div>
-
-        <div class="members-hint">
-          ⭐ = dono/organizador. O dono pode remover membros.
-        </div>
-      </div>
     </div>
   </div>
 
-  <!-- FOOTER (todas as telas) -->
-  <footer class="footer" id="footer"></footer>
+  <!-- Footer em todas as telas -->
+  <footer id="footer" class="footer"></footer>
 
   <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
     const SUPABASE_URL = "https://xzcgwnifypiqqushxrcs.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_9Nx27f1V0IgMkMw6BdTwmQ_B96lf3wq";
+
+    // GitHub Pages base
     const APP_URL = "https://dihegoof.github.io/manager/";
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -157,44 +136,24 @@
     const $ = (id) => document.getElementById(id);
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    /* ===== Toast ===== */
-    function toast(message, type = "success") {
-      const c = $("toastContainer");
-      if (!c) return;
+    // ===== Footer =====
+    $("footer").innerHTML = `© ${new Date().getFullYear()}
+      <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
+      — Todos os direitos reservados`;
 
-      const t = document.createElement("div");
-      t.className = `toast ${type}`;
-      t.innerHTML = `<div class="toast-bubble">${escapeHtml(message)}</div>`;
-      c.appendChild(t);
+    // ===== Toast =====
+    function toast(message, type = "info") {
+      const host = $("toastHost");
+      const el = document.createElement("div");
+      el.className = `toast ${type}`;
+      el.textContent = message || "";
+      host.appendChild(el);
 
-      // sobe e some
-      requestAnimationFrame(() => t.classList.add("show"));
-      setTimeout(() => t.classList.add("hide"), 3000);
-      setTimeout(() => t.remove(), 3600);
-    }
-
-    function escapeHtml(str) {
-      return String(str ?? "")
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#039;");
-    }
-
-    function humanizeAuthError(err) {
-      const raw = (err?.message || err || "").toString();
-      const m = raw.toLowerCase();
-
-      if (m.includes("invalid login") || m.includes("invalid credentials")) return { text: "Email ou senha inválidos.", type: "error" };
-      if (m.includes("email not confirmed")) return { text: "Confirme seu email antes de entrar.", type: "warn" };
-      if (m.includes("rate limit")) return { text: "Muitas tentativas. Aguarde um pouco e tente novamente.", type: "warn" };
-      if (m.includes("already registered") || m.includes("already exists") || m.includes("user already registered")) return { text: "Esse email já possui conta. Faça login.", type: "warn" };
-      if (m.includes("invalid email")) return { text: "Email inválido.", type: "warn" };
-      if (m.includes("password") && (m.includes("least") || m.includes("characters"))) return { text: "Senha precisa ter pelo menos 6 caracteres.", type: "warn" };
-
-      return { text: raw || "Ocorreu um erro.", type: "error" };
+      requestAnimationFrame(() => el.classList.add("show"));
+      setTimeout(() => el.classList.add("hide"), 3200);
+      setTimeout(() => el.remove(), 3800);
     }
 
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
@@ -235,10 +194,13 @@
       return session?.user || null;
     }
 
-    /* =========================================================
-       INVENTORY + APP
-    ========================================================= */
+    // ===== pending setup (para confirmar email ON / fluxos interrompidos) =====
+    const PENDING_KEY = "pending_inv_setup_v2";
+    const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
+    const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
+    const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
 
+    // ===== Inventory Cloud =====
     async function loadInventory(inventoryId) {
       const { data, error } = await supabase
         .from("inventories")
@@ -257,20 +219,17 @@
       if (error) throw error;
     }
 
+    // ===== Local cache por inventário =====
     const KEY_PREFIX = "home_inventory_inv_";
     const loadLocal = (invId) => { try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; } catch { return []; } };
     const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
 
+    // ===== State =====
     let items = [];
     let saveTimer = null;
     let currentInventoryId = null;
     let realtimeChannel = null;
     let showOnlyNeeds = false;
-
-    // MEMBERS STATE
-    let members = [];
-    let canManageMembers = false;
-    let meUserId = null;
 
     function needsBuy(it) {
       const qty = Number(it.qty ?? 0);
@@ -307,9 +266,9 @@
         const needs = needsBuy(it);
 
         left.innerHTML = `
-          <div class="name">${escapeHtml(it.name)}</div>
+          <div class="name">${it.name}</div>
           <div class="sub">
-            ${it.qty} ${escapeHtml(it.unit)} • mínimo: ${it.min_qty || 0}
+            ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
             ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
           </div>
         `;
@@ -348,7 +307,7 @@
         toast("Salvo ✅", "success");
       } catch (e) {
         console.error(e);
-        toast("Não salvou no cloud.", "error");
+        toast("Não salvou no cloud: " + (e?.message || e), "error");
       }
     }
 
@@ -395,8 +354,10 @@
       await saveNow(items);
     }
 
+    // ===== Realtime =====
     async function startRealtime(inventoryId) {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
+
       realtimeChannel = supabase
         .channel("inv-" + inventoryId)
         .on("postgres_changes", {
@@ -410,7 +371,7 @@
             items = newItems;
             saveLocal(inventoryId, items);
             render();
-            toast("Atualizado ⚡", "success");
+            toast("Atualizado em tempo real ⚡", "info");
           }
         })
         .subscribe();
@@ -421,131 +382,15 @@
       realtimeChannel = null;
     }
 
-    /* =========================================================
-       MEMBERS (REAL)
-    ========================================================= */
-
-    function renderMembers(list = []) {
-      const box = $("membersList");
-      if (!box) return;
-      box.innerHTML = "";
-
-      if (!Array.isArray(list) || !list.length) {
-        const empty = document.createElement("div");
-        empty.className = "members-empty";
-        empty.textContent = "Nenhum membro encontrado.";
-        box.appendChild(empty);
-        return;
-      }
-
-      for (const m of list) {
-        const row = document.createElement("div");
-        row.className = "member";
-
-        const left = document.createElement("div");
-        left.className = "member-left";
-
-        const name = document.createElement("div");
-        name.className = "member-name";
-        name.textContent = m.display_name || "Membro";
-
-        const meta = document.createElement("div");
-        meta.className = "member-meta";
-        meta.textContent = m.email || "";
-
-        left.appendChild(name);
-        if (m.email) left.appendChild(meta);
-
-        const right = document.createElement("div");
-        right.className = "member-right";
-
-        const badge = document.createElement("span");
-        badge.className = "member-badge " + (m.role === "owner" ? "owner" : "");
-        badge.textContent = m.role === "owner" ? "⭐ dono" : "membro";
-        right.appendChild(badge);
-
-        const btn = document.createElement("button");
-        btn.className = "small ghost";
-        btn.type = "button";
-        btn.textContent = "Remover";
-
-        const isMe = (m.user_id === meUserId);
-        const isOwnerTarget = (m.role === "owner");
-
-        // regras:
-        // - só owner remove
-        // - não remove a si mesmo
-        // - (simples) não remove owners (depois a gente melhora com múltiplos owners)
-        const canRemove = canManageMembers && !isMe && !isOwnerTarget;
-
-        btn.disabled = !canRemove;
-        btn.title = canRemove ? "Remover do inventário" : "Apenas o dono remove (e não remove donos).";
-        btn.onclick = async () => {
-          if (!canRemove) return;
-          if (!confirm(`Remover "${m.display_name || m.email || "membro"}" do inventário?`)) return;
-          await removeMember(m.user_id);
-        };
-
-        right.appendChild(btn);
-
-        row.append(left, right);
-        box.appendChild(row);
-      }
-    }
-
-    async function loadMembers() {
-      if (!currentInventoryId) return;
-
-      const user = await getSessionUser();
-      meUserId = user?.id || null;
-
-      const { data, error } = await supabase.rpc("list_inventory_members", {
-        p_inventory_id: currentInventoryId
-      });
-
-      if (error) {
-        console.error(error);
-        toast("Erro ao carregar membros.", "error");
-        return;
-      }
-
-      members = Array.isArray(data) ? data : [];
-      canManageMembers = members.some(m => m.user_id === meUserId && m.role === "owner");
-
-      renderMembers(members);
-    }
-
-    async function removeMember(userId) {
-      if (!currentInventoryId) return;
-
-      const { error } = await supabase.rpc("remove_inventory_member", {
-        p_inventory_id: currentInventoryId,
-        p_user_id: userId
-      });
-
-      if (error) {
-        console.error(error);
-        toast("Não consegui remover: " + error.message, "error");
-        return;
-      }
-
-      toast("Membro removido ✅", "success");
-      await loadMembers();
-    }
-
-    /* =========================================================
-       BOOT
-    ========================================================= */
-
+    // ===== Boot to inventory =====
     async function bootToInventory(inventoryId) {
       currentInventoryId = inventoryId;
 
       items = loadLocal(inventoryId) || [];
       showApp();
       render();
-      toast("Sincronizando…", "warn");
 
-      const data = await loadInventory(inventoryId);
+      const data = await loadInventory(inventoryId); // aqui é onde RLS costuma pegar
       if (Array.isArray(data?.items)) {
         items = data.items;
         saveLocal(inventoryId, items);
@@ -554,62 +399,38 @@
       render();
 
       await startRealtime(inventoryId);
-      await loadMembers();
-
       toast("Sincronizado ✅", "success");
     }
 
-    /* =========================================================
-       ✅ FINALIZAÇÃO PROFISSIONAL (metadata)
-    ========================================================= */
+    // ===== Finaliza pending setup (create/join) =====
+    async function finalizePendingSetupIfNeeded(sessionUser = null) {
+      const pending = getPendingSetup();
+      if (!pending) return false;
 
-    async function finalizeSetupFromMetadata(sessionUser = null) {
       const user = sessionUser || await getSessionUser();
       if (!user) return false;
 
-      // já tem inventário?
-      const { data: prof, error: profErr } = await supabase
-        .from("profiles")
-        .select("current_inventory_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (profErr) {
-        toast("Erro ao ler seu perfil.", "error");
-        return true;
-      }
-
-      if (prof?.current_inventory_id) return false;
-
-      const md = user.user_metadata || {};
-      const mode = md.inv_mode; // "create" | "join"
-      const code = (md.inv_code || "").toString().trim().toUpperCase();
-      const displayName = (md.display_name || "Usuário").toString().trim();
-
-      if (!mode || (mode === "join" && !code)) return false;
-
-      overlay(true);
       try {
         // profile name
-        const { error: upErr } = await supabase.from("profiles").upsert({
+        const { error: pErr } = await supabase.from("profiles").upsert({
           user_id: user.id,
-          display_name: displayName
+          display_name: pending.displayName || "Usuário",
         });
-        if (upErr) throw new Error(upErr.message);
+        if (pErr) throw new Error(pErr.message);
 
         let inventoryId = null;
 
-        if (mode === "create") {
+        if (pending.mode === "create") {
           const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
             p_name: "Inventário da Casa",
-            p_display_name: displayName
+            p_display_name: pending.displayName || "Usuário",
           });
           if (error) throw new Error(error.message);
           inventoryId = data?.[0]?.inventory_id;
         } else {
           const { data, error } = await supabase.rpc("join_inventory_by_code", {
-            p_code: code,
-            p_display_name: displayName
+            p_code: pending.code,
+            p_display_name: pending.displayName || "Usuário",
           });
           if (error) throw new Error(error.message);
           inventoryId = data?.[0]?.inventory_id;
@@ -617,66 +438,75 @@
 
         if (!inventoryId) throw new Error("Não consegui obter o inventário.");
 
-        // limpa metadata para não reexecutar
-        await supabase.auth.updateUser({ data: { inv_mode: null, inv_code: null } });
-
+        clearPendingSetup();
         await bootToInventory(inventoryId);
         return true;
       } catch (e) {
         console.error(e);
-        toast("Falha ao finalizar inventário: " + (e?.message || e), "error");
-        return true;
-      } finally {
-        overlay(false);
+        showRegister();
+        toast("Logado ✅ mas falhou o vínculo/criação: " + (e?.message || e), "warning");
+        return true; // já tratou UI
       }
     }
 
-    /* =========================================================
-       UI EVENTS
-    ========================================================= */
+    // ===== Boot from profile (com retry) =====
+    async function bootFromProfileWithRetry(userId) {
+      let lastErr = null;
 
+      for (let i = 0; i < 4; i++) {
+        try {
+          // tenta finalizar pending primeiro (se existir)
+          if (await finalizePendingSetupIfNeeded({ id: userId })) return;
+
+          const { data: prof, error } = await supabase
+            .from("profiles")
+            .select("current_inventory_id")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+          if (error) throw error;
+
+          // se por qualquer motivo ficou sem inv, cria automaticamente (sem “mensagem chata”)
+          if (!prof?.current_inventory_id) {
+            const { data, error: rpcErr } = await supabase.rpc("create_inventory_and_set_profile", {
+              p_name: "Inventário da Casa",
+              p_display_name: "Usuário",
+            });
+            if (rpcErr) throw rpcErr;
+
+            const newInv = data?.[0]?.inventory_id;
+            if (!newInv) throw new Error("RPC não retornou inventory_id.");
+            await bootToInventory(newInv);
+            return;
+          }
+
+          await bootToInventory(prof.current_inventory_id);
+          return;
+
+        } catch (e) {
+          lastErr = e;
+          await sleep(300 + i * 250);
+        }
+      }
+
+      throw lastErr || new Error("Falha ao iniciar.");
+    }
+
+    // ===== UI Events =====
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
-    $("membersRefresh")?.addEventListener("click", async () => {
-      await loadMembers();
-      toast("Membros atualizados ✅", "success");
-    });
-
-    // LOGIN
+    // LOGIN: só autentica, boot acontece no onAuthStateChange
     $("loginBtn").onclick = async () => {
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
 
       overlay(true);
       try {
-        const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          const h = humanizeAuthError(error);
-          toast(h.text, h.type);
-          return;
-        }
-
-        // tenta finalizar automaticamente
-        if (await finalizeSetupFromMetadata(signInData?.session?.user)) return;
-
-        const user = signInData?.session?.user || await getSessionUser();
-        const { data: prof, error: perr } = await supabase
-          .from("profiles")
-          .select("current_inventory_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (perr) throw perr;
-
-        if (prof?.current_inventory_id) {
-          await bootToInventory(prof.current_inventory_id);
-        } else {
-          // usuário antigo sem metadata
-          toast("Seu usuário não tem inventário vinculado. Use Registrar.", "warn");
-          showRegister();
-        }
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) return toast(error.message, "error");
+        toast("Logado ✅", "success");
       } catch (e) {
         console.error(e);
         toast("Falha no login.", "error");
@@ -693,46 +523,44 @@
       const gen = $("genInv").checked;
       const code = ($("invCode").value || "").trim().toUpperCase();
 
-      if (!displayName) return toast("Informe seu nome.", "warn");
-      if (!email) return toast("Informe seu email.", "warn");
-      if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warn");
-      if (!gen && !code) return toast("Informe o código do inventário.", "warn");
+      if (!displayName) return toast("Informe seu nome.", "warning");
+      if (!email) return toast("Informe seu email.", "warning");
+      if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warning");
+      if (!gen && !code) return toast("Informe o código do inventário.", "warning");
+
+      setPendingSetup({
+        displayName,
+        mode: gen ? "create" : "join",
+        code: gen ? "" : code,
+        createdAt: Date.now(),
+      });
 
       overlay(true);
       try {
-        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            emailRedirectTo: APP_URL,
-            data: {
-              display_name: displayName,
-              inv_mode: gen ? "create" : "join",
-              inv_code: gen ? null : code
-            }
-          }
+          options: { emailRedirectTo: APP_URL },
         });
 
-        if (signUpErr) {
-          const h = humanizeAuthError(signUpErr);
-          toast(h.text, h.type);
-          return;
+        if (error) {
+          clearPendingSetup();
+          return toast(error.message, "error");
         }
 
-        // confirm ON: não vem session
-        const user = signUpData?.session?.user || null;
-        if (!user) {
-          toast("Conta criada ✅ Confirme o email. Depois você entra direto no inventário.", "warn");
+        // Se confirm email estiver OFF, vem session e o onAuthStateChange vai bootar.
+        // Se estiver ON, ele pede confirmação (mas você está com confirm OFF agora).
+        if (!data?.session?.user) {
+          toast("Conta criada ✅ Confirme o email e depois faça login.", "info");
           showLogin();
           return;
         }
 
-        // confirm OFF: finaliza na hora
-        await finalizeSetupFromMetadata(user);
-
+        toast("Conta criada ✅", "success");
+        // onAuthStateChange vai finalizar e entrar
       } catch (e) {
         console.error(e);
-        toast(String(e?.message || e), "error");
+        toast("Falha no cadastro.", "error");
       } finally {
         overlay(false);
       }
@@ -741,8 +569,10 @@
     $("logoutBtn").onclick = async () => {
       await stopRealtime();
       await supabase.auth.signOut();
+      currentInventoryId = null;
+      items = [];
       showLogin();
-      toast("Saiu.", "success");
+      toast("Saiu.", "info");
     };
 
     $("invCodeShow").onclick = async () => {
@@ -765,7 +595,6 @@
       $("filterList").classList.toggle("active", showOnlyNeeds);
       $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
       render();
-      toast(showOnlyNeeds ? "Filtro ativado" : "Mostrando tudo", "success");
     };
 
     $("export").onclick = () => {
@@ -776,7 +605,7 @@
       a.download = "inventario.json";
       a.click();
       URL.revokeObjectURL(url);
-      toast("Backup exportado ✅", "success");
+      toast("Exportado ✅", "success");
     };
 
     $("import").onclick = async () => {
@@ -802,49 +631,39 @@
       items = [];
       render();
       await saveNow(items);
-      toast("Inventário zerado ✅", "success");
+      toast("Zerado ✅", "success");
     };
 
-    // INIT
-    (async () => {
-      // footer (todas as telas)
-      const footer = $("footer");
-      if (footer) {
-        footer.innerHTML =
-          `© ${new Date().getFullYear()} <a href="https://github.com/Dihegoof" target="_blank" rel="noopener noreferrer">Dihego Nunes</a> — Todos os direitos reservados`;
-      }
+    // ===== AUTH SOURCE OF TRUTH =====
+    let booting = false;
 
-      const { data: { session } } = await supabase.auth.getSession();
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (booting) return;
 
-      if (session?.user) {
-        if (await finalizeSetupFromMetadata(session.user)) return;
-
-        overlay(true);
-        try {
-          const { data: prof, error } = await supabase
-            .from("profiles")
-            .select("current_inventory_id")
-            .eq("user_id", session.user.id)
-            .maybeSingle();
-
-          if (error) throw error;
-
-          if (prof?.current_inventory_id) {
-            await bootToInventory(prof.current_inventory_id);
-          } else {
-            toast("Seu usuário não tem inventário vinculado. Use Registrar.", "warn");
-            showRegister();
-          }
-        } catch (e) {
-          console.error(e);
-          toast("Falha ao iniciar sessão.", "error");
-          showLogin();
-        } finally {
-          overlay(false);
-        }
-      } else {
+      if (!session?.user) {
         showLogin();
+        return;
       }
+
+      booting = true;
+      overlay(true);
+      try {
+        await bootFromProfileWithRetry(session.user.id);
+      } catch (e) {
+        console.error(e);
+        // NÃO chamar de “falha no login”: você está logado.
+        showRegister();
+        toast("Logado ✅ mas falhou ao sincronizar: " + (e?.message || e), "warning");
+      } finally {
+        overlay(false);
+        booting = false;
+      }
+    });
+
+    // First paint
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) showLogin();
     })();
   </script>
 </body>
