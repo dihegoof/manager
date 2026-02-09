@@ -10,9 +10,10 @@
 <body>
   <div id="overlay" class="overlay"><div class="spinner"></div></div>
 
-  <!-- ✅ TOASTS -->
-  <div id="toastContainer" class="toast-container"></div>
+  <!-- TOASTS -->
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
+  <!-- AUTH -->
   <div id="authView" class="center-screen">
     <div class="card login-card">
       <h1 class="title" id="authTitle">Entrar</h1>
@@ -26,12 +27,10 @@
           <input id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" />
         </div>
 
-        <div class="row mt12">
+        <div class="row mt12 actions">
           <button id="loginBtn">Logar</button>
           <button id="openRegisterBtn" class="small" type="button">Registrar</button>
         </div>
-
-        <div id="loginMsg" class="msg"></div>
       </div>
 
       <!-- REGISTER -->
@@ -47,7 +46,7 @@
         </div>
 
         <div class="row mt10" style="align-items:center;">
-          <label style="display:flex; align-items:center; gap:10px; user-select:none;">
+          <label class="checkline">
             <input id="genInv" type="checkbox" checked />
             Gerar inventário
           </label>
@@ -57,17 +56,15 @@
           <input id="invCode" placeholder="Código do inventário (6 letras/números)" autocomplete="off" disabled />
         </div>
 
-        <div class="row mt12">
+        <div class="row mt12 actions">
           <button id="registerBtn">Criar conta</button>
           <button id="backToLoginBtn" class="small" type="button">Voltar</button>
         </div>
-
-        <div id="regMsg" class="msg"></div>
       </div>
     </div>
   </div>
 
-  <!-- ===== APP ===== -->
+  <!-- APP -->
   <div id="appView" class="wrap hidden">
     <div class="card">
       <div class="row header-row">
@@ -75,11 +72,9 @@
         <button id="logoutBtn" class="small">Sair</button>
       </div>
 
-      <div id="appMsg" class="msg"></div>
-
       <div class="muted" style="margin-top:6px;">
         Código do inventário:
-        <span id="invCodeShow" class="pill" style="cursor:pointer;" title="Toque para copiar"></span>
+        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
       </div>
 
       <div class="divider"></div>
@@ -110,7 +105,7 @@
 
       <div class="divider"></div>
 
-      <div class="row">
+      <div class="row actions">
         <button class="small" id="filterList">Filtrar lista</button>
         <button class="small" id="export">Exportar (backup)</button>
         <button class="small" id="import">Importar</button>
@@ -118,10 +113,34 @@
       </div>
 
       <div class="list" id="list"></div>
+
+      <!-- MEMBERS -->
+      <div class="divider"></div>
+
+      <div class="members-card">
+        <div class="row members-header">
+          <div>
+            <div class="members-title">Membros do inventário</div>
+            <div class="members-sub">Quem tem acesso a este inventário</div>
+          </div>
+
+          <div class="row" style="gap:8px;">
+            <button id="membersRefresh" class="small" type="button">Atualizar</button>
+          </div>
+        </div>
+
+        <div id="membersList" class="members-list">
+          <div class="members-empty">Carregando…</div>
+        </div>
+
+        <div class="members-hint">
+          ⭐ = dono/organizador. O dono pode remover membros.
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- ✅ FOOTER -->
+  <!-- FOOTER (todas as telas) -->
   <footer class="footer" id="footer"></footer>
 
   <script type="module">
@@ -139,48 +158,43 @@
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
 
-    /* ===== Toast (balão estilo chat) ===== */
+    /* ===== Toast ===== */
     function toast(message, type = "success") {
-      const container = $("toastContainer");
-      if (!container) return;
+      const c = $("toastContainer");
+      if (!c) return;
 
-      const el = document.createElement("div");
-      el.className = "toast " + (type || "success");
-      el.textContent = message;
+      const t = document.createElement("div");
+      t.className = `toast ${type}`;
+      t.innerHTML = `<div class="toast-bubble">${escapeHtml(message)}</div>`;
+      c.appendChild(t);
 
-      container.appendChild(el);
-      setTimeout(() => el.remove(), 3600);
+      // sobe e some
+      requestAnimationFrame(() => t.classList.add("show"));
+      setTimeout(() => t.classList.add("hide"), 3000);
+      setTimeout(() => t.remove(), 3600);
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
     }
 
     function humanizeAuthError(err) {
-      const msg = (err?.message || err || "").toString();
-      const m = msg.toLowerCase();
+      const raw = (err?.message || err || "").toString();
+      const m = raw.toLowerCase();
 
-      if (m.includes("invalid login") || m.includes("invalid credentials"))
-        return { text: "Email ou senha inválidos.", type: "error" };
+      if (m.includes("invalid login") || m.includes("invalid credentials")) return { text: "Email ou senha inválidos.", type: "error" };
+      if (m.includes("email not confirmed")) return { text: "Confirme seu email antes de entrar.", type: "warn" };
+      if (m.includes("rate limit")) return { text: "Muitas tentativas. Aguarde um pouco e tente novamente.", type: "warn" };
+      if (m.includes("already registered") || m.includes("already exists") || m.includes("user already registered")) return { text: "Esse email já possui conta. Faça login.", type: "warn" };
+      if (m.includes("invalid email")) return { text: "Email inválido.", type: "warn" };
+      if (m.includes("password") && (m.includes("least") || m.includes("characters"))) return { text: "Senha precisa ter pelo menos 6 caracteres.", type: "warn" };
 
-      if (m.includes("email not confirmed"))
-        return { text: "Confirme seu email antes de entrar.", type: "warn" };
-
-      if (m.includes("rate limit"))
-        return { text: "Muitas tentativas. Aguarde um pouco e tente novamente.", type: "warn" };
-
-      if (m.includes("already registered") || m.includes("already exists") || m.includes("user already registered"))
-        return { text: "Esse email já possui conta. Faça login.", type: "warn" };
-
-      if (m.includes("password") && m.includes("least"))
-        return { text: "Senha precisa ter pelo menos 6 caracteres.", type: "warn" };
-
-      if (m.includes("invalid email"))
-        return { text: "Email inválido.", type: "warn" };
-
-      return { text: msg || "Ocorreu um erro.", type: "error" };
-    }
-
-    // ✅ setMsg agora só usa TOAST
-    function setMsg(_el, text, isError = false) {
-      if (!text) return;
-      toast(text, isError ? "error" : "success");
+      return { text: raw || "Ocorreu um erro.", type: "error" };
     }
 
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
@@ -253,6 +267,11 @@
     let realtimeChannel = null;
     let showOnlyNeeds = false;
 
+    // MEMBERS STATE
+    let members = [];
+    let canManageMembers = false;
+    let meUserId = null;
+
     function needsBuy(it) {
       const qty = Number(it.qty ?? 0);
       const min = Number(it.min_qty ?? 0);
@@ -288,9 +307,9 @@
         const needs = needsBuy(it);
 
         left.innerHTML = `
-          <div class="name">${it.name}</div>
+          <div class="name">${escapeHtml(it.name)}</div>
           <div class="sub">
-            ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
+            ${it.qty} ${escapeHtml(it.unit)} • mínimo: ${it.min_qty || 0}
             ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
           </div>
         `;
@@ -402,6 +421,122 @@
       realtimeChannel = null;
     }
 
+    /* =========================================================
+       MEMBERS (REAL)
+    ========================================================= */
+
+    function renderMembers(list = []) {
+      const box = $("membersList");
+      if (!box) return;
+      box.innerHTML = "";
+
+      if (!Array.isArray(list) || !list.length) {
+        const empty = document.createElement("div");
+        empty.className = "members-empty";
+        empty.textContent = "Nenhum membro encontrado.";
+        box.appendChild(empty);
+        return;
+      }
+
+      for (const m of list) {
+        const row = document.createElement("div");
+        row.className = "member";
+
+        const left = document.createElement("div");
+        left.className = "member-left";
+
+        const name = document.createElement("div");
+        name.className = "member-name";
+        name.textContent = m.display_name || "Membro";
+
+        const meta = document.createElement("div");
+        meta.className = "member-meta";
+        meta.textContent = m.email || "";
+
+        left.appendChild(name);
+        if (m.email) left.appendChild(meta);
+
+        const right = document.createElement("div");
+        right.className = "member-right";
+
+        const badge = document.createElement("span");
+        badge.className = "member-badge " + (m.role === "owner" ? "owner" : "");
+        badge.textContent = m.role === "owner" ? "⭐ dono" : "membro";
+        right.appendChild(badge);
+
+        const btn = document.createElement("button");
+        btn.className = "small ghost";
+        btn.type = "button";
+        btn.textContent = "Remover";
+
+        const isMe = (m.user_id === meUserId);
+        const isOwnerTarget = (m.role === "owner");
+
+        // regras:
+        // - só owner remove
+        // - não remove a si mesmo
+        // - (simples) não remove owners (depois a gente melhora com múltiplos owners)
+        const canRemove = canManageMembers && !isMe && !isOwnerTarget;
+
+        btn.disabled = !canRemove;
+        btn.title = canRemove ? "Remover do inventário" : "Apenas o dono remove (e não remove donos).";
+        btn.onclick = async () => {
+          if (!canRemove) return;
+          if (!confirm(`Remover "${m.display_name || m.email || "membro"}" do inventário?`)) return;
+          await removeMember(m.user_id);
+        };
+
+        right.appendChild(btn);
+
+        row.append(left, right);
+        box.appendChild(row);
+      }
+    }
+
+    async function loadMembers() {
+      if (!currentInventoryId) return;
+
+      const user = await getSessionUser();
+      meUserId = user?.id || null;
+
+      const { data, error } = await supabase.rpc("list_inventory_members", {
+        p_inventory_id: currentInventoryId
+      });
+
+      if (error) {
+        console.error(error);
+        toast("Erro ao carregar membros.", "error");
+        return;
+      }
+
+      members = Array.isArray(data) ? data : [];
+      canManageMembers = members.some(m => m.user_id === meUserId && m.role === "owner");
+
+      renderMembers(members);
+    }
+
+    async function removeMember(userId) {
+      if (!currentInventoryId) return;
+
+      const { error } = await supabase.rpc("remove_inventory_member", {
+        p_inventory_id: currentInventoryId,
+        p_user_id: userId
+      });
+
+      if (error) {
+        console.error(error);
+        toast("Não consegui remover: " + error.message, "error");
+        return;
+      }
+
+      toast("Membro removido ✅", "success");
+      await loadMembers();
+    }
+
+    /* =========================================================
+       BOOT
+    ========================================================= */
+
     async function bootToInventory(inventoryId) {
       currentInventoryId = inventoryId;
 
@@ -419,19 +554,20 @@
       render();
 
       await startRealtime(inventoryId);
+      await loadMembers();
+
       toast("Sincronizado ✅", "success");
     }
 
     /* =========================================================
-       ✅ FINALIZAÇÃO PROFISSIONAL (SEM localStorage):
-       Usa user_metadata gravado no signUp.
+       ✅ FINALIZAÇÃO PROFISSIONAL (metadata)
     ========================================================= */
 
     async function finalizeSetupFromMetadata(sessionUser = null) {
       const user = sessionUser || await getSessionUser();
       if (!user) return false;
 
-      // Se o profile já tem inventário, segue normal
+      // já tem inventário?
       const { data: prof, error: profErr } = await supabase
         .from("profiles")
         .select("current_inventory_id")
@@ -439,7 +575,6 @@
         .maybeSingle();
 
       if (profErr) {
-        // se falhar, não mostra fallback (só erro)
         toast("Erro ao ler seu perfil.", "error");
         return true;
       }
@@ -451,12 +586,11 @@
       const code = (md.inv_code || "").toString().trim().toUpperCase();
       const displayName = (md.display_name || "Usuário").toString().trim();
 
-      // Se não tem metadata, não tem como completar automaticamente
       if (!mode || (mode === "join" && !code)) return false;
 
       overlay(true);
       try {
-        // garante profile com nome
+        // profile name
         const { error: upErr } = await supabase.from("profiles").upsert({
           user_id: user.id,
           display_name: displayName
@@ -468,14 +602,14 @@
         if (mode === "create") {
           const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
             p_name: "Inventário da Casa",
-            p_display_name: displayName,
+            p_display_name: displayName
           });
           if (error) throw new Error(error.message);
           inventoryId = data?.[0]?.inventory_id;
         } else {
           const { data, error } = await supabase.rpc("join_inventory_by_code", {
             p_code: code,
-            p_display_name: displayName,
+            p_display_name: displayName
           });
           if (error) throw new Error(error.message);
           inventoryId = data?.[0]?.inventory_id;
@@ -483,7 +617,7 @@
 
         if (!inventoryId) throw new Error("Não consegui obter o inventário.");
 
-        // limpa metadata pra não ficar reexecutando
+        // limpa metadata para não reexecutar
         await supabase.auth.updateUser({ data: { inv_mode: null, inv_code: null } });
 
         await bootToInventory(inventoryId);
@@ -491,7 +625,7 @@
       } catch (e) {
         console.error(e);
         toast("Falha ao finalizar inventário: " + (e?.message || e), "error");
-        return true; // evita cair no fallback
+        return true;
       } finally {
         overlay(false);
       }
@@ -504,6 +638,11 @@
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
+
+    $("membersRefresh")?.addEventListener("click", async () => {
+      await loadMembers();
+      toast("Membros atualizados ✅", "success");
+    });
 
     // LOGIN
     $("loginBtn").onclick = async () => {
@@ -519,7 +658,7 @@
           return;
         }
 
-        // ✅ tenta finalizar automaticamente (create/join) se necessário
+        // tenta finalizar automaticamente
         if (await finalizeSetupFromMetadata(signInData?.session?.user)) return;
 
         const user = signInData?.session?.user || await getSessionUser();
@@ -534,8 +673,8 @@
         if (prof?.current_inventory_id) {
           await bootToInventory(prof.current_inventory_id);
         } else {
-          // se chegou aqui, é porque NÃO tem metadata e NÃO tem inventory
-          toast("Seu usuário não tem inventário vinculado. Vá em Registrar.", "warn");
+          // usuário antigo sem metadata
+          toast("Seu usuário não tem inventário vinculado. Use Registrar.", "warn");
           showRegister();
         }
       } catch (e) {
@@ -561,7 +700,6 @@
 
       overlay(true);
       try {
-        // ✅ guarda intenção no user_metadata (PROFISSIONAL)
         const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
           email,
           password,
@@ -572,7 +710,7 @@
               inv_mode: gen ? "create" : "join",
               inv_code: gen ? null : code
             }
-          },
+          }
         });
 
         if (signUpErr) {
@@ -581,19 +719,17 @@
           return;
         }
 
-        // Confirm email ON: sem session aqui -> avisa e volta login
+        // confirm ON: não vem session
         const user = signUpData?.session?.user || null;
         if (!user) {
-          toast("Conta criada ✅ Confirme seu email. Depois você entra direto no inventário.", "warn");
+          toast("Conta criada ✅ Confirme o email. Depois você entra direto no inventário.", "warn");
           showLogin();
           return;
         }
 
-        // Confirm OFF: já finaliza na hora
-        if (await finalizeSetupFromMetadata(user)) return;
+        // confirm OFF: finaliza na hora
+        await finalizeSetupFromMetadata(user);
 
-        toast("Conta criada ✅ Faça login.", "success");
-        showLogin();
       } catch (e) {
         console.error(e);
         toast(String(e?.message || e), "error");
@@ -671,9 +807,16 @@
 
     // INIT
     (async () => {
+      // footer (todas as telas)
+      const footer = $("footer");
+      if (footer) {
+        footer.innerHTML =
+          `© ${new Date().getFullYear()} <a href="https://github.com/Dihegoof" target="_blank" rel="noopener noreferrer">Dihego Nunes</a> — Todos os direitos reservados`;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
+
       if (session?.user) {
-        // ✅ tenta finalizar automaticamente antes de qualquer fallback
         if (await finalizeSetupFromMetadata(session.user)) return;
 
         overlay(true);
@@ -689,8 +832,7 @@
           if (prof?.current_inventory_id) {
             await bootToInventory(prof.current_inventory_id);
           } else {
-            // se chegou aqui, é usuário antigo sem inventário + sem metadata
-            toast("Seu usuário não tem inventário vinculado. Vá em Registrar.", "warn");
+            toast("Seu usuário não tem inventário vinculado. Use Registrar.", "warn");
             showRegister();
           }
         } catch (e) {
@@ -704,15 +846,6 @@
         showLogin();
       }
     })();
-
-    // FOOTER
-    const footer = $("footer");
-    if (footer) {
-      footer.innerHTML =
-        `© ${new Date().getFullYear()} 
-         <a href="https://github.com/Dihegoof" target="_blank" rel="noopener noreferrer">Dihego Nunes</a>
-         — Todos os direitos reservados`;
-    }
   </script>
 </body>
 </html>
