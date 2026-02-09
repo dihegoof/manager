@@ -1,12 +1,42 @@
 :root{
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+
+  /* ===== Paleta clean (azul bebê + branco + preto) ===== */
+  --bg: #f6f8fc;
+  --card: #ffffff;
+  --text: #0b1220;
+  --muted: #5d6b85;
+  --line: rgba(15, 23, 42, 0.12);
+
+  --primary: #7fc8ff;          /* azul bebê */
+  --primary-strong: #3aa9ff;   /* azul mais forte (p/ hover) */
+  --primary-soft: rgba(127,200,255,.22);
+
+  --danger: #ff4d7d;
+  --danger-soft: rgba(255,77,125,.12);
+
+  --shadow: 0 10px 28px rgba(2, 10, 26, .08);
+  --radius: 16px;
+  --radius-sm: 12px;
+
+  --tap: 44px;
 }
+
+/* ===== Layout base: footer sempre aparece (login e app) ===== */
+html, body{ height:100%; }
 
 body{
   margin:0;
-  background:#0b0f17;
-  color:#e8eefc;
+  background: var(--bg);
+  color: var(--text);
+
+  min-height: 100vh;
+  display:flex;
+  flex-direction: column;
 }
+
+/* views ocupam o espaço e empurram footer pro fim */
+#authView, #appView{ flex:1; }
 
 /* util */
 .hidden{ display:none !important; }
@@ -15,42 +45,43 @@ body{
 .w120{ max-width:120px; }
 
 .wrap{
-  max-width:820px;
+  max-width: 860px;
   margin:0 auto;
   padding:16px;
 }
 
 .card{
-  background:#111829;
-  border:1px solid #22304d;
-  border-radius:16px;
-  padding:14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding:16px;
+  box-shadow: var(--shadow);
 }
 
-h1{
-  margin:0 0 12px;
-  font-size:20px;
-}
-
+h1,
 .title{
   margin:0 0 12px;
   font-size:20px;
+  letter-spacing: .2px;
 }
 
+/* linhas */
 .row{
   display:flex;
   gap:10px;
   flex-wrap:wrap;
 }
 
+/* inputs e botões (touch friendly) */
 input, select, button{
-  border-radius:12px;
-  border:1px solid #2b3a5f;
-  background:#0f1626;
-  color:#e8eefc;
-  padding:12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--text);
+  padding: 12px;
   font-size:14px;
   outline:none;
+  min-height: var(--tap);
 }
 
 input{
@@ -60,20 +91,48 @@ input{
 
 select{
   min-width:110px;
+  appearance: none;
 }
 
+/* botão padrão */
 button{
   cursor:pointer;
+  background: var(--primary-soft);
+  border-color: rgba(127,200,255,.45);
+  transition: transform .06s ease, background .15s ease, border-color .15s ease;
+}
+
+button:hover{
+  background: rgba(127,200,255,.30);
+  border-color: rgba(58,169,255,.65);
+}
+
+button:active{
+  transform: translateY(1px);
+}
+
+/* botões small */
+.small{
+  padding: 8px 10px;
+  font-size: 13px;
+  min-height: 38px;
+}
+
+/* header */
+.header-row{
+  justify-content: space-between;
+  align-items: center;
 }
 
 /* ✅ botão filtro ligado */
 #filterList.active{
-  background: rgba(77,163,255,.16);
-  border-color: #4da3ff;
+  background: rgba(127,200,255,.38);
+  border-color: rgba(58,169,255,.75);
 }
 
+/* textos auxiliares */
 .muted{
-  color:#a9b5d2;
+  color: var(--muted);
   font-size:12px;
   margin-top:8px;
 }
@@ -85,19 +144,26 @@ button{
   gap:10px;
 }
 
+/* item com cara de card */
 .item{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:10px;
+
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(127,200,255,.10);
 }
 
 .name{
-  font-weight:650;
+  font-weight: 700;
+  font-size: 15px;
 }
 
 .sub{
-  color:#a9b5d2;
+  color: var(--muted);
   font-size:12px;
 }
 
@@ -107,41 +173,44 @@ button{
   gap:8px;
 }
 
+.controls button{
+  min-width: 44px;
+  padding: 10px 12px;
+}
+
+/* pill */
 .qty{
-  min-width:70px;
+  min-width:72px;
   text-align:center;
   font-variant-numeric: tabular-nums;
 }
 
 .pill{
-  padding:6px 10px;
-  border-radius:999px;
-  background:#0f203e;
-  border:1px solid #2b3a5f;
-  font-size:12px;
-  color:#bcd3ff;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(127,200,255,.20);
+  border: 1px solid rgba(127,200,255,.45);
+  font-size: 12px;
+  color: #074064;
 }
 
+/* alerta */
 .danger{
-  background:#2a1020;
-  border-color:#6a2a4a;
-  color:#ffb4d2;
-}
-
-.small{
-  padding:8px 10px;
-  font-size:13px;
+  background: var(--danger-soft);
+  border-color: rgba(255,77,125,.45);
+  color: #8a1233;
 }
 
 .divider{
   height:1px;
-  background:#22304d;
+  background: var(--line);
   margin:12px 0;
 }
 
-/* ===== Login central ===== */
+/* ===== Login central (sem 100vh pra não sumir footer) ===== */
 .center-screen{
-  min-height:100vh;
+  min-height: auto; /* importante */
+  flex: 1;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -150,19 +219,21 @@ button{
 
 .login-card{
   width:min(420px, 100%);
-  border-radius:16px;
+  border-radius: var(--radius);
   padding:16px;
 }
 
-/* mensagens */
+/* mensagens (se quiser, pode até ocultar depois – toast já resolve) */
 .msg{
   margin-top:10px;
   font-size:13px;
   opacity:.9;
+  color: var(--muted);
 }
 
 .msg.error{
   opacity:1;
+  color: #8a1233;
 }
 
 /* ===== Overlay loading ===== */
@@ -172,11 +243,12 @@ button{
   display:flex;
   align-items:center;
   justify-content:center;
-  background:rgba(0,0,0,.35);
-  backdrop-filter: blur(2px);
+  background: rgba(0,0,0,.20);
+  backdrop-filter: blur(3px);
   opacity:0;
   pointer-events:none;
   transition: opacity .18s ease;
+  z-index: 9998;
 }
 
 .overlay.on{
@@ -188,8 +260,8 @@ button{
   width:46px;
   height:46px;
   border-radius:999px;
-  border:4px solid rgba(255,255,255,.25);
-  border-top-color: rgba(255,255,255,.95);
+  border: 4px solid rgba(255,255,255,.45);
+  border-top-color: rgba(58,169,255,.95);
   animation: spin .8s linear infinite;
 }
 
@@ -197,7 +269,7 @@ button{
   to { transform: rotate(360deg); }
 }
 
-/* transição leve entre telas */
+/* transição leve */
 .fade-in{
   animation: fade .18s ease both;
 }
@@ -207,20 +279,64 @@ button{
   to{ opacity:1; transform:none; }
 }
 
-@media (max-width:480px){
-  .qty{ min-width:58px; }
+/* ===== TOAST (topo central, sobe devagar e some) ===== */
+.toast-container{
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
 }
 
+.toast{
+  pointer-events: none;
+  max-width: min(92vw, 520px);
+  padding: 12px 14px;
+  border-radius: 14px;
+
+  background: #ffffff;
+  border: 1px solid rgba(127,200,255,.55);
+  box-shadow: 0 12px 32px rgba(2, 10, 26, .10);
+
+  color: #0b1220;
+  font-size: 14px;
+  text-align: center;
+
+  opacity: 0;
+  transform: translateY(-10px);
+  animation: toast-in .22s ease forwards, toast-out .65s ease forwards;
+  animation-delay: 0s, 2.6s;
+}
+
+.toast.error{
+  border-color: rgba(255,77,125,.55);
+  background: #fff7f9;
+  color: #8a1233;
+}
+
+@keyframes toast-in{
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-out{
+  to { opacity: 0; transform: translateY(-22px); }
+}
+
+/* ===== Footer ===== */
 .footer{
+  margin-top: auto;
   text-align: center;
   font-size: 12px;
-  color: #6f7da3;
-  padding: 22px 10px 30px;
-  opacity: .7;
+  color: rgba(11,18,32,.60);
+  padding: 18px 12px 26px;
 }
 
 .footer a{
-  color: #8faeff;
+  color: rgba(58,169,255,.95);
   text-decoration: none;
 }
 
@@ -228,6 +344,52 @@ button{
   text-decoration: underline;
 }
 
-.footer:hover{
-  opacity: 1;
+/* ===== Responsivo (celular) ===== */
+@media (max-width: 640px){
+
+  .wrap{ padding: 12px; }
+
+  /* inputs e botões com largura total em mobile */
+  input, select, button{ width: 100%; }
+
+  /* botão sair não virar gigante */
+  .header-row button{ width: auto; }
+
+  /* linha do cadastro de item (detecta pelo #name) vira grid */
+  .row:has(#name){
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .row:has(#name) #name{ grid-column: 1 / -1; }
+  .row:has(#name) #add{ grid-column: 1 / -1; }
+
+  /* linha de botões (detecta pelo #filterList) vira 2 colunas */
+  .row:has(#filterList){
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .item{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .controls{
+    justify-content: space-between;
+  }
+
+  .qty{ min-width: 60px; }
+}
+
+/* fallback pra navegadores que não suportam :has (apenas por segurança) */
+@supports not selector(:has(*)){
+  @media (max-width: 640px){
+    .item{ flex-direction: column; align-items: stretch; }
+    .controls{ justify-content: space-between; }
+  }
 }
