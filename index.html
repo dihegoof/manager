@@ -39,7 +39,7 @@
           <input id="regName" placeholder="Seu nome" autocomplete="name" />
         </div>
         <div class="row mt10">
-          <input id="regEmail" placeholder="Email" autocomplete="username" />
+          <input id="regEmail" placeholder="Email”" autocomplete="username" />
         </div>
         <div class="row mt10">
           <input id="regPass" type="password" placeholder="Senha" autocomplete="new-password" />
@@ -74,7 +74,7 @@
 
       <div class="muted" style="margin-top:6px;">
         Código do inventário:
-        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
+        <span id="invCodeShow" class="pill copy" style="cursor:pointer;" title="Toque para copiar"></span>
       </div>
 
       <div class="divider"></div>
@@ -116,7 +116,6 @@
     </div>
   </div>
 
-  <!-- Footer -->
   <footer id="footer" class="footer"></footer>
 
   <script type="module">
@@ -133,22 +132,34 @@
     const $ = (id) => document.getElementById(id);
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    // Footer (CORRIGIDO: usa id footer, não $("footer"))
+    // Footer
     $("footer").innerHTML = `© ${new Date().getFullYear()}
       <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
       — Todos os direitos reservados`;
 
-    // Toast
+    // ===== Toast (com dedupe + no spam) =====
+    let lastToastKey = "";
+    let lastToastAt = 0;
+
     function toast(message, type = "info") {
+      const msg = (message || "").toString().trim();
+      if (!msg) return;
+
+      // evita repetição imediata
+      const key = type + "|" + msg;
+      const now = Date.now();
+      if (key === lastToastKey && (now - lastToastAt) < 1200) return;
+      lastToastKey = key;
+      lastToastAt = now;
+
       const host = $("toastHost");
       const wrap = document.createElement("div");
       wrap.className = `toast ${type}`;
 
       const bubble = document.createElement("div");
       bubble.className = "toast-bubble";
-      bubble.textContent = message || "";
+      bubble.textContent = msg;
 
       wrap.appendChild(bubble);
       host.appendChild(wrap);
@@ -191,11 +202,6 @@
       if (gen) $("invCode").value = "";
     }
 
-    async function getSessionUser() {
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.user || null;
-    }
-
     // pending setup
     const PENDING_KEY = "pending_inv_setup_v2";
     const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
@@ -231,7 +237,9 @@
     let saveTimer = null;
     let currentInventoryId = null;
     let realtimeChannel = null;
+    let realtimeInventoryId = null;
     let showOnlyNeeds = false;
+    let bootInProgress = false;
 
     function needsBuy(it) {
       const qty = Number(it.qty ?? 0);
@@ -356,11 +364,14 @@
       await saveNow(items);
     }
 
-    // realtime
     async function startRealtime(inventoryId) {
+      // já está no inv certo? não recria
+      if (realtimeChannel && realtimeInventoryId === inventoryId) return;
+
       try {
         if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
 
+        realtimeInventoryId = inventoryId;
         realtimeChannel = supabase
           .channel("inv-" + inventoryId)
           .on("postgres_changes", {
@@ -374,38 +385,30 @@
               items = newItems;
               saveLocal(inventoryId, items);
               render();
+              // sem toast aqui (evita spam)
             }
           })
           .subscribe();
       } catch (e) {
         console.error("Realtime falhou:", e);
-        toast("Tempo real indisponível (ok).", "warn");
       }
     }
 
     async function stopRealtime() {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
       realtimeChannel = null;
-    }
-
-    // timeout helper
-    async function withTimeout(promise, ms, label = "timeout") {
-      let t;
-      const timeout = new Promise((_, rej) => t = setTimeout(() => rej(new Error(label)), ms));
-      try {
-        return await Promise.race([promise, timeout]);
-      } finally {
-        clearTimeout(t);
-      }
+      realtimeInventoryId = null;
     }
 
     async function bootToInventory(inventoryId) {
       currentInventoryId = inventoryId;
 
+      // UI + cache imediata
       items = loadLocal(inventoryId) || [];
       showApp();
       render();
 
+      // carrega do cloud
       const data = await loadInventory(inventoryId);
       if (Array.isArray(data?.items)) {
         items = data.items;
@@ -418,99 +421,83 @@
       toast("Sincronizado ✅", "success");
     }
 
-    async function finalizePendingSetupIfNeeded(sessionUser = null) {
+    async function finalizePendingSetupIfNeeded(user) {
       const pending = getPendingSetup();
       if (!pending) return false;
 
-      const user = sessionUser || await getSessionUser();
-      if (!user) return false;
-
-      try {
-        const { error: pErr } = await supabase.from("profiles").upsert({
-          user_id: user.id,
-          display_name: pending.displayName || "Usuário",
-        });
-        if (pErr) throw new Error(pErr.message);
-
-        let inventoryId = null;
-
-        if (pending.mode === "create") {
-          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
-            p_name: "Inventário da Casa",
-            p_display_name: pending.displayName || "Usuário",
-          });
-          if (error) throw new Error(error.message);
-          inventoryId = data?.[0]?.inventory_id;
-        } else {
-          const { data, error } = await supabase.rpc("join_inventory_by_code", {
-            p_code: pending.code,
-            p_display_name: pending.displayName || "Usuário",
-          });
-          if (error) throw new Error(error.message);
-          inventoryId = data?.[0]?.inventory_id;
-        }
-
-        if (!inventoryId) throw new Error("Não consegui obter o inventário.");
+      // evita pending velho
+      if (pending?.createdAt && (Date.now() - pending.createdAt) > (1000 * 60 * 60 * 24)) {
         clearPendingSetup();
-        await bootToInventory(inventoryId);
-        return true;
-      } catch (e) {
-        console.error(e);
-        // IMPORTANT: não “engole” o boot para sempre
-        toast("Falhou ao finalizar cadastro: " + (e?.message || e), "warn");
         return false;
       }
-    }
 
-    async function bootFromProfileWithRetry(userId) {
-      let lastErr = null;
+      // garante profile (nome)
+      const { error: pErr } = await supabase.from("profiles").upsert({
+        user_id: user.id,
+        display_name: pending.displayName || "Usuário",
+      });
+      if (pErr) throw new Error("Profile: " + pErr.message);
 
-      for (let i = 0; i < 4; i++) {
-        try {
-          if (await finalizePendingSetupIfNeeded({ id: userId })) return;
+      let inventoryId = null;
 
-          const { data: prof, error } = await supabase
-            .from("profiles")
-            .select("current_inventory_id")
-            .eq("user_id", userId)
-            .maybeSingle();
-
-          if (error) throw error;
-
-          if (!prof?.current_inventory_id) {
-            showRegister();
-            toast("Complete o cadastro: gere um inventário ou informe um código.", "info");
-            return;
-          }
-
-          await bootToInventory(prof.current_inventory_id);
-          return;
-
-        } catch (e) {
-          lastErr = e;
-          await sleep(300 + i * 250);
-        }
+      if (pending.mode === "create") {
+        const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
+          p_name: "Inventário da Casa",
+          p_display_name: pending.displayName || "Usuário",
+        });
+        if (error) throw new Error("RPC create: " + error.message);
+        inventoryId = data?.[0]?.inventory_id;
+      } else {
+        const { data, error } = await supabase.rpc("join_inventory_by_code", {
+          p_code: pending.code,
+          p_display_name: pending.displayName || "Usuário",
+        });
+        if (error) throw new Error("RPC join: " + error.message);
+        inventoryId = data?.[0]?.inventory_id;
       }
 
-      throw lastErr || new Error("Falha ao iniciar.");
+      if (!inventoryId) throw new Error("RPC não retornou inventory_id.");
+      clearPendingSetup();
+
+      await bootToInventory(inventoryId);
+      return true;
     }
 
-    // UI events
+    async function bootFromProfile(user) {
+      // tenta finalizar cadastro pendente primeiro
+      if (await finalizePendingSetupIfNeeded(user)) return;
+
+      const { data: prof, error } = await supabase
+        .from("profiles")
+        .select("current_inventory_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!prof?.current_inventory_id) {
+        // aqui NÃO cria inventário automaticamente (sem gambiarra)
+        showRegister();
+        toast("Finalize: marque 'Gerar inventário' ou informe um código.", "info");
+        return;
+      }
+
+      await bootToInventory(prof.current_inventory_id);
+    }
+
+    // ===== UI events =====
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
-    // login
     $("loginBtn").onclick = async () => {
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
-
       overlay(true);
       try {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return toast(error.message, "error");
-        // boot será feito pelo init ou onAuthStateChange
-        toast("Logado ✅", "success");
+        // boot vai acontecer no onAuthStateChange
       } catch (e) {
         console.error(e);
         toast("Falha no login.", "error");
@@ -519,7 +506,6 @@
       }
     };
 
-    // register
     $("registerBtn").onclick = async () => {
       const displayName = $("regName").value.trim();
       const email = $("regEmail").value.trim();
@@ -552,19 +538,18 @@
           return toast(error.message, "error");
         }
 
-        // Se confirm email estiver ON, não vem sessão
+        // confirm email ON -> não vem session
         if (!data?.session?.user) {
           toast("Conta criada ✅ Confirme o email e depois faça login.", "info");
           showLogin();
           return;
         }
 
-        // Confirm OFF -> já finaliza agora também (evita depender de evento)
-        toast("Conta criada ✅ Finalizando…", "success");
-        await withTimeout(bootFromProfileWithRetry(data.session.user.id), 9000, "init timeout");
+        // confirm OFF -> o onAuthStateChange vai bootar
+        toast("Conta criada ✅", "success");
       } catch (e) {
         console.error(e);
-        toast("Falha no cadastro: " + (e?.message || e), "error");
+        toast("Falha no cadastro.", "error");
       } finally {
         overlay(false);
       }
@@ -643,55 +628,46 @@
       toast("Zerado ✅", "success");
     };
 
-    // auth source of truth
-    let booting = false;
-
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (booting) return;
-
+    // ===== auth = source of truth (único boot) =====
+    async function handleSession(session) {
+      if (bootInProgress) return;
       if (!session?.user) {
         showLogin();
         return;
       }
 
-      // NÃO liga overlay aqui para sempre; o init também chama boot.
-      // Aqui é “extra”.
-      booting = true;
+      bootInProgress = true;
+      overlay(true);
       try {
-        await withTimeout(bootFromProfileWithRetry(session.user.id), 9000, "init timeout");
+        await bootFromProfile(session.user);
       } catch (e) {
         console.error(e);
         showRegister();
         toast("Logado ✅ mas falhou ao sincronizar: " + (e?.message || e), "warn");
       } finally {
         overlay(false);
-        booting = false;
+        bootInProgress = false;
       }
+    }
+
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      // esse é o ÚNICO lugar que inicia o app
+      await handleSession(session);
     });
 
-    // INIT (CORRIGIDO: se já tem session, chama boot AGORA)
+    // init: dispara UMA vez usando o mesmo fluxo
     (async () => {
       overlay(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
-
-        if (!session?.user) {
-          showLogin();
-          return;
-        }
-
-        booting = true;
-        await withTimeout(bootFromProfileWithRetry(session.user.id), 9000, "init timeout");
-      } catch (e) {
-        console.error(e);
-        // fallback: evita spinner infinito
-        showLogin();
-        toast("Falha ao iniciar. Tente logar novamente.", "warn");
+        await handleSession(session);
       } finally {
         overlay(false);
-        booting = false;
       }
     })();
+
+    // start UI
+    showLogin();
   </script>
 </body>
 </html>
