@@ -247,6 +247,9 @@
     let realtimeChannel = null;
     let showOnlyNeeds = false;
 
+    // ✅ anti-race: quando cadastro está acontecendo, ignora onAuthStateChange
+    let authFlowBusy = false;
+
     function needsBuy(it) {
       const qty = Number(it.qty ?? 0);
       const min = Number(it.min_qty ?? 0);
@@ -332,7 +335,7 @@
       }
     }
 
-    // ===== cloud helpers (schema: inventories.items JSON) =====
+    // ===== cloud helpers =====
     async function loadInventory(inventoryId) {
       const { data, error } = await supabase
         .from("inventories")
@@ -353,15 +356,30 @@
       if (error) throw error;
     }
 
+    // ✅ FIX: timeout “falso” no 3G/4G
     async function saveNow(arr, quiet = false) {
       if (!currentInventoryId) return;
       saveLocal(currentInventoryId, arr);
 
       try {
-        await runTask("Salvar", () => saveInventoryItems(currentInventoryId, arr), { showOverlay: false, timeoutMs: 12000 });
+        await runTask("Salvar", () => saveInventoryItems(currentInventoryId, arr), {
+          showOverlay: false,
+          timeoutMs: 30000
+        });
         if (!quiet) toast("Salvo ✅", "success", "saved");
-      } catch {
-        // runTask já mostra toast de erro
+      } catch (e) {
+        const msg = (e?.message || "").toLowerCase();
+        if (msg.includes("timeout")) {
+          toast("Salvando… (rede lenta)", "warn", "save-slow");
+          setTimeout(async () => {
+            try {
+              await saveInventoryItems(currentInventoryId, arr);
+              toast("Salvo ✅", "success", "saved-late");
+            } catch {}
+          }, 800);
+          return;
+        }
+        toast("Não salvou no cloud: " + (e?.message || e), "error", "save-error");
       }
     }
 
@@ -438,13 +456,11 @@
     async function bootToInventory(inventoryId) {
       currentInventoryId = inventoryId;
 
-      // cache local primeiro
       items = loadLocal(inventoryId) || [];
       showApp();
       render();
 
-      // cloud
-      const data = await runTask("Sincronizar", () => loadInventory(inventoryId), { showOverlay: true, timeoutMs: 20000 });
+      const data = await runTask("Sincronizar", () => loadInventory(inventoryId), { showOverlay: true, timeoutMs: 25000 });
       if (Array.isArray(data?.items)) {
         items = data.items;
         saveLocal(inventoryId, items);
@@ -462,12 +478,11 @@
     const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
     const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
 
-    async function finalizePendingSetupIfNeeded(user) {
+    async function finalizePendingSetupIfNeeded(user, { silent = false } = {}) {
       const pending = getPendingSetup();
       if (!pending) return false;
 
       try {
-        // cria/atualiza profile
         await runTask("Criar perfil", async () => {
           const { error } = await supabase.from("profiles").upsert({
             user_id: user.id,
@@ -495,20 +510,25 @@
         }
 
         if (!inventoryId) throw new Error("Não consegui obter o inventário.");
+
         clearPendingSetup();
         await bootToInventory(inventoryId);
         return true;
+
       } catch (e) {
         clearPendingSetup();
-        showRegister();
-        toast("Logado ✅ mas falhou ao finalizar inventário: " + (e?.message || e), "warn", "finalize-fail");
-        return true;
+        if (!silent) {
+          showRegister();
+          toast("Logado ✅ mas falhou ao finalizar inventário: " + (e?.message || e), "warn", "finalize-fail");
+        }
+        return false;
       }
     }
 
     async function bootFromProfile(user) {
-      // se tem pending, finaliza (e entra no inventário)
-      if (await finalizePendingSetupIfNeeded(user)) return;
+      // se tem pending, finaliza
+      const did = await finalizePendingSetupIfNeeded(user, { silent: true });
+      if (did) return;
 
       const { data: prof, error } = await supabase
         .from("profiles")
@@ -518,7 +538,6 @@
 
       if (error) throw error;
 
-      // ✅ Agora, se estiver logado mas sem inventário, já abre registrar (pra escolher criar/join)
       if (!prof?.current_inventory_id) {
         showRegister();
         toast("Você está logado. Agora gere um inventário ou informe um código.", "warn", "need-inv");
@@ -545,7 +564,7 @@
       }, { showOverlay: true, timeoutMs: 20000 });
     };
 
-    // REGISTER (✅ finaliza e entra no inventário automaticamente)
+    // REGISTER (✅ anti-race + finaliza na hora)
     $("registerBtn").onclick = async () => {
       const displayName = $("regName").value.trim();
       const email = $("regEmail").value.trim();
@@ -560,33 +579,39 @@
 
       setPendingSetup({ displayName, mode: gen ? "create" : "join", code: gen ? "" : code, createdAt: Date.now() });
 
-      await runTask("Criar conta", async () => {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: APP_URL },
-        });
-        if (error) {
-          clearPendingSetup();
-          throw error;
-        }
+      authFlowBusy = true; // ✅ impede o onAuthStateChange de disparar boot junto
 
-        // Confirm Email ON => sem session
-        const user = data?.session?.user;
-        if (!user) {
-          toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
-          showLogin();
-          return;
-        }
+      try {
+        await runTask("Criar conta", async () => {
+          const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { emailRedirectTo: APP_URL },
+          });
+          if (error) {
+            clearPendingSetup();
+            throw error;
+          }
 
-        // ✅ Finaliza agora e já entra no inventário
-        await runTask("Preparar inventário", async () => {
-          const ok = await finalizePendingSetupIfNeeded(user);
-          if (!ok) throw new Error("Não consegui finalizar inventário.");
-        }, { showOverlay: true, timeoutMs: 25000 });
+          const user = data?.session?.user;
+          if (!user) {
+            toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
+            showLogin();
+            return;
+          }
 
-        toast("Tudo pronto ✅", "success", "ready");
-      }, { showOverlay: true, timeoutMs: 25000 });
+          await runTask("Preparar inventário", async () => {
+            const ok = await finalizePendingSetupIfNeeded(user, { silent: false });
+            if (!ok) throw new Error("Não consegui finalizar inventário.");
+          }, { showOverlay: true, timeoutMs: 30000 });
+
+          toast("Tudo pronto ✅", "success", "ready");
+        }, { showOverlay: true, timeoutMs: 30000 });
+
+      } finally {
+        // dá um respiro pro auth listener não entrar logo depois
+        setTimeout(() => { authFlowBusy = false; }, 1200);
+      }
     };
 
     $("logoutBtn").onclick = async () => {
@@ -656,7 +681,7 @@
           render();
           await saveNow(items);
           toast("Importado ✅", "success", "import-ok");
-        }, { showOverlay: true, timeoutMs: 25000 });
+        }, { showOverlay: true, timeoutMs: 30000 });
       };
 
       inp.click();
@@ -670,13 +695,15 @@
         render();
         await saveNow(items);
         toast("Zerado ✅", "success", "clear-ok");
-      }, { showOverlay: true, timeoutMs: 20000 });
+      }, { showOverlay: true, timeoutMs: 25000 });
     };
 
     // ===== auth listener =====
     let bootLock = false;
 
     supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (authFlowBusy) return; // ✅ evita corrida com register flow
+
       if (!session?.user) {
         bootLock = false;
         overlay(false);
