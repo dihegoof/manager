@@ -182,7 +182,7 @@
       ]);
     }
 
-    async function runTask(label, fn, { showOverlay = true, timeoutMs = 9000 } = {}) {
+    async function runTask(label, fn, { showOverlay = true, timeoutMs = 12000 } = {}) {
       if (showOverlay) overlay(true);
       try {
         return await withTimeout(fn(), timeoutMs, label);
@@ -313,9 +313,9 @@
         minus.textContent = "−";
         minus.onclick = () => updateQty(it.id, it.unit === "un" ? -1 : -0.1);
 
-        const qty = document.createElement("div");
-        qty.className = "qty pill";
-        qty.textContent = `${it.qty} ${it.unit}`;
+        const qtyEl = document.createElement("div");
+        qtyEl.className = "qty pill";
+        qtyEl.textContent = `${it.qty} ${it.unit}`;
 
         const plus = document.createElement("button");
         plus.textContent = "+";
@@ -326,7 +326,7 @@
         del.title = "Remover";
         del.onclick = () => removeItem(it.id);
 
-        controls.append(minus, qty, plus, del);
+        controls.append(minus, qtyEl, plus, del);
         row.append(left, controls);
         list.appendChild(row);
       }
@@ -358,7 +358,7 @@
       saveLocal(currentInventoryId, arr);
 
       try {
-        await runTask("Salvar", () => saveInventoryItems(currentInventoryId, arr), { showOverlay: false, timeoutMs: 9000 });
+        await runTask("Salvar", () => saveInventoryItems(currentInventoryId, arr), { showOverlay: false, timeoutMs: 12000 });
         if (!quiet) toast("Salvo ✅", "success", "saved");
       } catch {
         // runTask já mostra toast de erro
@@ -444,7 +444,7 @@
       render();
 
       // cloud
-      const data = await runTask("Sincronizar", () => loadInventory(inventoryId), { showOverlay: true, timeoutMs: 9000 });
+      const data = await runTask("Sincronizar", () => loadInventory(inventoryId), { showOverlay: true, timeoutMs: 20000 });
       if (Array.isArray(data?.items)) {
         items = data.items;
         saveLocal(inventoryId, items);
@@ -467,19 +467,20 @@
       if (!pending) return false;
 
       try {
+        // cria/atualiza profile
         await runTask("Criar perfil", async () => {
           const { error } = await supabase.from("profiles").upsert({
             user_id: user.id,
             display_name: pending.displayName || "Usuário",
           });
           if (error) throw error;
-        }, { showOverlay: true });
+        }, { showOverlay: true, timeoutMs: 20000 });
 
         let inventoryId = null;
 
         if (pending.mode === "create") {
           const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
-            p_name: "Inventário da Casa",
+            p_name: "Inventário",
             p_display_name: pending.displayName || "Usuário",
           });
           if (error) throw error;
@@ -506,6 +507,7 @@
     }
 
     async function bootFromProfile(user) {
+      // se tem pending, finaliza (e entra no inventário)
       if (await finalizePendingSetupIfNeeded(user)) return;
 
       const { data: prof, error } = await supabase
@@ -516,6 +518,7 @@
 
       if (error) throw error;
 
+      // ✅ Agora, se estiver logado mas sem inventário, já abre registrar (pra escolher criar/join)
       if (!prof?.current_inventory_id) {
         showRegister();
         toast("Você está logado. Agora gere um inventário ou informe um código.", "warn", "need-inv");
@@ -530,6 +533,7 @@
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
+    // LOGIN
     $("loginBtn").onclick = async () => {
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
@@ -538,9 +542,10 @@
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast("Logado ✅", "success", "logged");
-      }, { showOverlay: true, timeoutMs: 9000 });
+      }, { showOverlay: true, timeoutMs: 20000 });
     };
 
+    // REGISTER (✅ finaliza e entra no inventário automaticamente)
     $("registerBtn").onclick = async () => {
       const displayName = $("regName").value.trim();
       const email = $("regEmail").value.trim();
@@ -561,16 +566,27 @@
           password,
           options: { emailRedirectTo: APP_URL },
         });
-        if (error) throw error;
+        if (error) {
+          clearPendingSetup();
+          throw error;
+        }
 
-        if (!data?.session?.user) {
+        // Confirm Email ON => sem session
+        const user = data?.session?.user;
+        if (!user) {
           toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
           showLogin();
           return;
         }
 
-        toast("Conta criada ✅", "success", "signup-ok");
-      }, { showOverlay: true, timeoutMs: 9000 });
+        // ✅ Finaliza agora e já entra no inventário
+        await runTask("Preparar inventário", async () => {
+          const ok = await finalizePendingSetupIfNeeded(user);
+          if (!ok) throw new Error("Não consegui finalizar inventário.");
+        }, { showOverlay: true, timeoutMs: 25000 });
+
+        toast("Tudo pronto ✅", "success", "ready");
+      }, { showOverlay: true, timeoutMs: 25000 });
     };
 
     $("logoutBtn").onclick = async () => {
@@ -582,7 +598,7 @@
         items = [];
         showLogin();
         toast("Saiu.", "warn", "logout");
-      }, { showOverlay: true, timeoutMs: 9000 });
+      }, { showOverlay: true, timeoutMs: 20000 });
     };
 
     $("invCodeShow").onclick = async () => {
@@ -640,7 +656,7 @@
           render();
           await saveNow(items);
           toast("Importado ✅", "success", "import-ok");
-        }, { showOverlay: true, timeoutMs: 12000 });
+        }, { showOverlay: true, timeoutMs: 25000 });
       };
 
       inp.click();
@@ -654,50 +670,41 @@
         render();
         await saveNow(items);
         toast("Zerado ✅", "success", "clear-ok");
-      }, { showOverlay: true, timeoutMs: 9000 });
+      }, { showOverlay: true, timeoutMs: 20000 });
     };
 
-    // ===== auth source of truth (sem loop infinito) =====
-    let unsub = null;
+    // ===== auth listener =====
     let bootLock = false;
 
-    function attachAuthListener() {
-      if (unsub) return;
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!session?.user) {
+        bootLock = false;
+        overlay(false);
+        showLogin();
+        return;
+      }
 
-      const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        if (!session?.user) {
-          bootLock = false;
-          overlay(false);
-          showLogin();
-          return;
-        }
+      if (bootLock) return;
+      bootLock = true;
 
-        if (bootLock) return;
-        bootLock = true;
-
-        try {
-          await runTask("Iniciar", () => bootFromProfile(session.user), { showOverlay: true, timeoutMs: 12000 });
-        } catch {
-          showRegister();
-          toast("Logado ✅ mas falhou ao sincronizar. Verifique policies/RPC.", "warn", "boot-fail");
-        } finally {
-          bootLock = false;
-        }
-      });
-
-      unsub = () => data?.subscription?.unsubscribe?.();
-    }
+      try {
+        await runTask("Iniciar", () => bootFromProfile(session.user), { showOverlay: true, timeoutMs: 25000 });
+      } catch {
+        showRegister();
+        toast("Logado ✅ mas falhou ao sincronizar. Verifique policies/RPC.", "warn", "boot-fail");
+      } finally {
+        bootLock = false;
+      }
+    });
 
     // first paint
     (async () => {
-      attachAuthListener();
-
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
         showLogin();
       } else {
         try {
-          await runTask("Iniciar", () => bootFromProfile(session.user), { showOverlay: true, timeoutMs: 12000 });
+          await runTask("Iniciar", () => bootFromProfile(session.user), { showOverlay: true, timeoutMs: 25000 });
         } catch {
           showRegister();
         }
