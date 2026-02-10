@@ -402,7 +402,11 @@
       showApp();
       render();
 
-      const data = await loadInventory(inventoryId);
+      
+
+      // Para evitar "carregando infinito": já libera a UI com cache local.
+      overlay(false);
+const data = await loadInventory(inventoryId);
       if (Array.isArray(data?.items)) {
         items = data.items;
         saveLocal(inventoryId, items);
@@ -642,6 +646,7 @@
 
       booting = true;
       overlay(true);
+      const watchdog = setTimeout(() => overlay(false), 15000);
       try {
         await bootFromProfileWithRetry(session.user.id);
       } catch (e) {
