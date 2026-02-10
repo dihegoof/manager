@@ -74,7 +74,7 @@
 
       <div class="muted" style="margin-top:6px;">
         Código do inventário:
-        <span id="invCodeShow" class="pill" style="cursor:pointer;" title="Toque para copiar"></span>
+        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
       </div>
 
       <div class="divider"></div>
@@ -116,7 +116,7 @@
     </div>
   </div>
 
-  <!-- Footer em todas as telas -->
+  <!-- Footer -->
   <footer id="footer" class="footer"></footer>
 
   <script type="module">
@@ -135,7 +135,7 @@
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    // Footer
+    // Footer (CORRIGIDO: usa id footer, não $("footer"))
     $("footer").innerHTML = `© ${new Date().getFullYear()}
       <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
       — Todos os direitos reservados`;
@@ -358,30 +358,45 @@
 
     // realtime
     async function startRealtime(inventoryId) {
-      if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
+      try {
+        if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
 
-      realtimeChannel = supabase
-        .channel("inv-" + inventoryId)
-        .on("postgres_changes", {
-          event: "*",
-          schema: "public",
-          table: "inventories",
-          filter: `id=eq.${inventoryId}`,
-        }, (payload) => {
-          const newItems = payload?.new?.items;
-          if (Array.isArray(newItems)) {
-            items = newItems;
-            saveLocal(inventoryId, items);
-            render();
-            toast("Atualizado em tempo real ⚡", "info");
-          }
-        })
-        .subscribe();
+        realtimeChannel = supabase
+          .channel("inv-" + inventoryId)
+          .on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table: "inventories",
+            filter: `id=eq.${inventoryId}`,
+          }, (payload) => {
+            const newItems = payload?.new?.items;
+            if (Array.isArray(newItems)) {
+              items = newItems;
+              saveLocal(inventoryId, items);
+              render();
+            }
+          })
+          .subscribe();
+      } catch (e) {
+        console.error("Realtime falhou:", e);
+        toast("Tempo real indisponível (ok).", "warn");
+      }
     }
 
     async function stopRealtime() {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
       realtimeChannel = null;
+    }
+
+    // timeout helper
+    async function withTimeout(promise, ms, label = "timeout") {
+      let t;
+      const timeout = new Promise((_, rej) => t = setTimeout(() => rej(new Error(label)), ms));
+      try {
+        return await Promise.race([promise, timeout]);
+      } finally {
+        clearTimeout(t);
+      }
     }
 
     async function bootToInventory(inventoryId) {
@@ -441,9 +456,9 @@
         return true;
       } catch (e) {
         console.error(e);
-        showRegister();
-        toast("Logado ✅ mas falhou vínculo/criação: " + (e?.message || e), "warning");
-        return true;
+        // IMPORTANT: não “engole” o boot para sempre
+        toast("Falhou ao finalizar cadastro: " + (e?.message || e), "warn");
+        return false;
       }
     }
 
@@ -463,15 +478,8 @@
           if (error) throw error;
 
           if (!prof?.current_inventory_id) {
-            const { data, error: rpcErr } = await supabase.rpc("create_inventory_and_set_profile", {
-              p_name: "Inventário da Casa",
-              p_display_name: "Usuário",
-            });
-            if (rpcErr) throw rpcErr;
-
-            const newInv = data?.[0]?.inventory_id;
-            if (!newInv) throw new Error("RPC não retornou inventory_id.");
-            await bootToInventory(newInv);
+            showRegister();
+            toast("Complete o cadastro: gere um inventário ou informe um código.", "info");
             return;
           }
 
@@ -492,7 +500,7 @@
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
-    // login: só autentica
+    // login
     $("loginBtn").onclick = async () => {
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
@@ -501,6 +509,7 @@
       try {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return toast(error.message, "error");
+        // boot será feito pelo init ou onAuthStateChange
         toast("Logado ✅", "success");
       } catch (e) {
         console.error(e);
@@ -518,10 +527,10 @@
       const gen = $("genInv").checked;
       const code = ($("invCode").value || "").trim().toUpperCase();
 
-      if (!displayName) return toast("Informe seu nome.", "warning");
-      if (!email) return toast("Informe seu email.", "warning");
-      if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warning");
-      if (!gen && !code) return toast("Informe o código do inventário.", "warning");
+      if (!displayName) return toast("Informe seu nome.", "warn");
+      if (!email) return toast("Informe seu email.", "warn");
+      if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warn");
+      if (!gen && !code) return toast("Informe o código do inventário.", "warn");
 
       setPendingSetup({
         displayName,
@@ -543,28 +552,36 @@
           return toast(error.message, "error");
         }
 
+        // Se confirm email estiver ON, não vem sessão
         if (!data?.session?.user) {
           toast("Conta criada ✅ Confirme o email e depois faça login.", "info");
           showLogin();
           return;
         }
 
-        toast("Conta criada ✅", "success");
+        // Confirm OFF -> já finaliza agora também (evita depender de evento)
+        toast("Conta criada ✅ Finalizando…", "success");
+        await withTimeout(bootFromProfileWithRetry(data.session.user.id), 9000, "init timeout");
       } catch (e) {
         console.error(e);
-        toast("Falha no cadastro.", "error");
+        toast("Falha no cadastro: " + (e?.message || e), "error");
       } finally {
         overlay(false);
       }
     };
 
     $("logoutBtn").onclick = async () => {
-      await stopRealtime();
-      await supabase.auth.signOut();
-      currentInventoryId = null;
-      items = [];
-      showLogin();
-      toast("Saiu.", "info");
+      overlay(true);
+      try {
+        await stopRealtime();
+        await supabase.auth.signOut();
+        currentInventoryId = null;
+        items = [];
+        showLogin();
+        toast("Saiu.", "info");
+      } finally {
+        overlay(false);
+      }
     };
 
     $("invCodeShow").onclick = async () => {
@@ -637,24 +654,43 @@
         return;
       }
 
+      // NÃO liga overlay aqui para sempre; o init também chama boot.
+      // Aqui é “extra”.
       booting = true;
-      overlay(true);
       try {
-        await bootFromProfileWithRetry(session.user.id);
+        await withTimeout(bootFromProfileWithRetry(session.user.id), 9000, "init timeout");
       } catch (e) {
         console.error(e);
         showRegister();
-        toast("Logado ✅ mas falhou ao sincronizar: " + (e?.message || e), "warning");
+        toast("Logado ✅ mas falhou ao sincronizar: " + (e?.message || e), "warn");
       } finally {
         overlay(false);
         booting = false;
       }
     });
 
-    // first paint
+    // INIT (CORRIGIDO: se já tem session, chama boot AGORA)
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) showLogin();
+      overlay(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session?.user) {
+          showLogin();
+          return;
+        }
+
+        booting = true;
+        await withTimeout(bootFromProfileWithRetry(session.user.id), 9000, "init timeout");
+      } catch (e) {
+        console.error(e);
+        // fallback: evita spinner infinito
+        showLogin();
+        toast("Falha ao iniciar. Tente logar novamente.", "warn");
+      } finally {
+        overlay(false);
+        booting = false;
+      }
     })();
   </script>
 </body>
