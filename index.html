@@ -135,6 +135,13 @@
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+    function withTimeout(promise, ms = 12000, label = \"timeout\") {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms))
+      ]);
+    }
+
     // Footer
     $("footer").innerHTML = `© ${new Date().getFullYear()}
       <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
@@ -204,11 +211,15 @@
 
     // inventory cloud
     async function loadInventory(inventoryId) {
-      const { data, error } = await supabase
-        .from("inventories")
-        .select("items, invite_code")
-        .eq("id", inventoryId)
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from("inventories")
+          .select("items, invite_code")
+          .eq("id", inventoryId)
+          .single(),
+        12000,
+        "loadInventory timeout"
+      );
       if (error) throw error;
       return data;
     }
@@ -420,12 +431,7 @@
         let inventoryId = null;
 
         if (pending.mode === "create") {
-          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
-            p_name: "Inventário da Casa",
-            p_display_name: pending.displayName || "Usuário",
-          });
-          if (error) throw new Error(error.message);
-          inventoryId = data?.[0]?.inventory_id;
+          inventoryId = await createInventoryClientSide(user.id, pending.displayName || "Usuário");
         } else {
           const { data, error } = await supabase.rpc("join_inventory_by_code", {
             p_code: pending.code,
@@ -454,23 +460,20 @@
         try {
           if (await finalizePendingSetupIfNeeded({ id: userId })) return;
 
-          const { data: prof, error } = await supabase
-            .from("profiles")
-            .select("current_inventory_id")
-            .eq("user_id", userId)
-            .maybeSingle();
+          const { data: prof, error } = await withTimeout(
+            supabase
+              .from("profiles")
+              .select("current_inventory_id")
+              .eq("user_id", userId)
+              .maybeSingle(),
+            12000,
+            "profiles select timeout"
+          );
 
           if (error) throw error;
 
           if (!prof?.current_inventory_id) {
-            const { data, error: rpcErr } = await supabase.rpc("create_inventory_and_set_profile", {
-              p_name: "Inventário da Casa",
-              p_display_name: "Usuário",
-            });
-            if (rpcErr) throw rpcErr;
-
-            const newInv = data?.[0]?.inventory_id;
-            if (!newInv) throw new Error("RPC não retornou inventory_id.");
+            const newInv = await createInventoryClientSide(userId, "Usuário");
             await bootToInventory(newInv);
             return;
           }
@@ -651,7 +654,6 @@
       }
     });
 
-    // first paint
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) showLogin();
