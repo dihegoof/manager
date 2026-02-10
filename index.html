@@ -133,36 +133,30 @@
     const $ = (id) => document.getElementById(id);
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    // Footer
-    $("footer").innerHTML = `© ${new Date().getFullYear()}
-      <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
-      — Todos os direitos reservados`;
-
-    // ===== Toast (com anti-spam) =====
-    const lastToastAt = new Map();
-    function normalizeToastType(type) {
-      // Seu CSS tem: success / error / warn
-      if (type === "success" || type === "error" || type === "warn") return type;
-      // mapeia "info" / "warning" pra "warn"
-      return "warn";
+    // ===== Footer =====
+    const footerEl = $("footer");
+    if (footerEl) {
+      footerEl.innerHTML = `© ${new Date().getFullYear()}
+        <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
+        — Todos os direitos reservados`;
     }
+
+    // ===== Toast =====
+    const lastToastAt = new Map();
     function toast(message, type = "warn", key = "") {
-      const t = normalizeToastType(type);
       const msg = (message || "").toString().trim();
       if (!msg) return;
 
-      // anti-spam: se mesma key/msg em < 1.2s, ignora
-      const k = key || (t + ":" + msg);
+      const k = key || (type + ":" + msg);
       const now = Date.now();
       const last = lastToastAt.get(k) || 0;
-      if (now - last < 1200) return;
+      if (now - last < 900) return;
       lastToastAt.set(k, now);
 
       const host = $("toastHost");
       const wrap = document.createElement("div");
-      wrap.className = `toast ${t}`;
+      wrap.className = `toast ${type}`;
 
       const bubble = document.createElement("div");
       bubble.className = "toast-bubble";
@@ -176,21 +170,8 @@
       setTimeout(() => wrap.remove(), 3800);
     }
 
-    // ===== Overlay + failsafe =====
+    // ===== Overlay =====
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
-
-    let overlayTimer = null;
-    function overlaySafe(on, reason = "") {
-      overlay(!!on);
-      clearTimeout(overlayTimer);
-      if (on) {
-        overlayTimer = setTimeout(() => {
-          overlay(false);
-          toast("Travou no carregamento (rede/policy). Tenta de novo ou atualiza a página.", "warn", "overlay-timeout");
-          console.warn("Overlay timeout:", reason);
-        }, 12000);
-      }
-    }
 
     function withTimeout(promise, ms, label = "operação") {
       return Promise.race([
@@ -201,7 +182,19 @@
       ]);
     }
 
-    // Se der erro JS, desliga overlay e mostra toast
+    async function runTask(label, fn, { showOverlay = true, timeoutMs = 9000 } = {}) {
+      if (showOverlay) overlay(true);
+      try {
+        return await withTimeout(fn(), timeoutMs, label);
+      } catch (e) {
+        console.error(label, e);
+        toast(`${label}: ${e?.message || e}`, "error", "err:" + label);
+        throw e;
+      } finally {
+        if (showOverlay) overlay(false);
+      }
+    }
+
     window.addEventListener("unhandledrejection", (e) => {
       console.error("unhandledrejection:", e?.reason);
       overlay(false);
@@ -220,7 +213,6 @@
       $("registerForm").classList.add("hidden");
       $("authView").classList.remove("hidden");
       $("appView").classList.add("hidden");
-      $("authView").classList.add("fade-in");
     }
 
     function showRegister() {
@@ -230,53 +222,17 @@
       $("authView").classList.remove("hidden");
       $("appView").classList.add("hidden");
       syncRegisterUI();
-      $("authView").classList.add("fade-in");
     }
 
     function showApp() {
       $("authView").classList.add("hidden");
       $("appView").classList.remove("hidden");
-      $("appView").classList.add("fade-in");
     }
 
     function syncRegisterUI() {
       const gen = $("genInv").checked;
       $("invCode").disabled = gen;
       if (gen) $("invCode").value = "";
-    }
-
-    async function getSessionUser() {
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.user || null;
-    }
-
-    // ===== pending setup =====
-    const PENDING_KEY = "pending_inv_setup_v2";
-    const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
-    const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
-    const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
-
-    // ===== cloud =====
-    async function loadInventory(inventoryId) {
-      const req = supabase
-        .from("inventories")
-        .select("items, invite_code")
-        .eq("id", inventoryId)
-        .single();
-
-      const { data, error } = await withTimeout(req, 9000, "load inventory");
-      if (error) throw error;
-      return data;
-    }
-
-    async function saveInventoryItems(inventoryId, arr) {
-      const req = supabase
-        .from("inventories")
-        .update({ items: arr, updated_at: new Date().toISOString() })
-        .eq("id", inventoryId);
-
-      const { error } = await withTimeout(req, 9000, "save inventory");
-      if (error) throw error;
     }
 
     // ===== local cache by inventory =====
@@ -295,6 +251,23 @@
       const qty = Number(it.qty ?? 0);
       const min = Number(it.min_qty ?? 0);
       return qty <= 0 || (min > 0 && qty <= min);
+    }
+
+    function normalizeItem(raw) {
+      const name = (raw?.name || "").toString().trim();
+      const unit = (raw?.unit || "un").toString().trim();
+      const qty = round(Number(raw?.qty ?? 0));
+      const min_qty = round(Number(raw?.min_qty ?? 0));
+      if (!name) return null;
+
+      return {
+        id: raw?.id || crypto.randomUUID(),
+        name,
+        name_norm: norm(name),
+        unit,
+        qty: Math.max(0, qty),
+        min_qty: Math.max(0, min_qty),
+      };
     }
 
     function render() {
@@ -359,16 +332,36 @@
       }
     }
 
+    // ===== cloud helpers (schema: inventories.items JSON) =====
+    async function loadInventory(inventoryId) {
+      const { data, error } = await supabase
+        .from("inventories")
+        .select("items, invite_code")
+        .eq("id", inventoryId)
+        .single();
+
+      if (error) throw error;
+      return data;
+    }
+
+    async function saveInventoryItems(inventoryId, arr) {
+      const { error } = await supabase
+        .from("inventories")
+        .update({ items: arr, updated_at: new Date().toISOString() })
+        .eq("id", inventoryId);
+
+      if (error) throw error;
+    }
+
     async function saveNow(arr, quiet = false) {
       if (!currentInventoryId) return;
       saveLocal(currentInventoryId, arr);
 
       try {
-        await saveInventoryItems(currentInventoryId, arr);
+        await runTask("Salvar", () => saveInventoryItems(currentInventoryId, arr), { showOverlay: false, timeoutMs: 9000 });
         if (!quiet) toast("Salvo ✅", "success", "saved");
-      } catch (e) {
-        console.error(e);
-        toast("Não salvou no cloud: " + (e?.message || e), "error", "save-error");
+      } catch {
+        // runTask já mostra toast de erro
       }
     }
 
@@ -376,7 +369,6 @@
       if (!currentInventoryId) return;
       saveLocal(currentInventoryId, arr);
       clearTimeout(saveTimer);
-      // ao usar +/- não spamma toast
       saveTimer = setTimeout(() => saveNow(arr, true), 250);
     }
 
@@ -416,7 +408,7 @@
       await saveNow(items);
     }
 
-    // ===== realtime (sem toast spam) =====
+    // ===== realtime =====
     async function startRealtime(inventoryId) {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
 
@@ -446,13 +438,13 @@
     async function bootToInventory(inventoryId) {
       currentInventoryId = inventoryId;
 
-      // 1) cache local primeiro (rápido)
+      // cache local primeiro
       items = loadLocal(inventoryId) || [];
       showApp();
       render();
 
-      // 2) cloud (com timeout)
-      const data = await loadInventory(inventoryId);
+      // cloud
+      const data = await runTask("Sincronizar", () => loadInventory(inventoryId), { showOverlay: true, timeoutMs: 9000 });
       if (Array.isArray(data?.items)) {
         items = data.items;
         saveLocal(inventoryId, items);
@@ -461,51 +453,43 @@
       render();
 
       await startRealtime(inventoryId);
-
       toast("Sincronizado ✅", "success", "synced");
     }
 
-    async function finalizePendingSetupIfNeeded(sessionUser = null) {
+    // ===== pending setup =====
+    const PENDING_KEY = "pending_inv_setup_v2";
+    const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
+    const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
+    const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
+
+    async function finalizePendingSetupIfNeeded(user) {
       const pending = getPendingSetup();
       if (!pending) return false;
 
-      const user = sessionUser || await getSessionUser();
-      if (!user) return false;
-
       try {
-        const { error: pErr } = await withTimeout(
-          supabase.from("profiles").upsert({
+        await runTask("Criar perfil", async () => {
+          const { error } = await supabase.from("profiles").upsert({
             user_id: user.id,
             display_name: pending.displayName || "Usuário",
-          }),
-          9000,
-          "profile upsert"
-        );
-        if (pErr) throw new Error(pErr.message);
+          });
+          if (error) throw error;
+        }, { showOverlay: true });
 
         let inventoryId = null;
 
         if (pending.mode === "create") {
-          const { data, error } = await withTimeout(
-            supabase.rpc("create_inventory_and_set_profile", {
-              p_name: "Inventário da Casa",
-              p_display_name: pending.displayName || "Usuário",
-            }),
-            9000,
-            "RPC create"
-          );
-          if (error) throw new Error(error.message);
+          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
+            p_name: "Inventário da Casa",
+            p_display_name: pending.displayName || "Usuário",
+          });
+          if (error) throw error;
           inventoryId = data?.[0]?.inventory_id;
         } else {
-          const { data, error } = await withTimeout(
-            supabase.rpc("join_inventory_by_code", {
-              p_code: pending.code,
-              p_display_name: pending.displayName || "Usuário",
-            }),
-            9000,
-            "RPC join"
-          );
-          if (error) throw new Error(error.message);
+          const { data, error } = await supabase.rpc("join_inventory_by_code", {
+            p_code: pending.code,
+            p_display_name: pending.displayName || "Usuário",
+          });
+          if (error) throw error;
           inventoryId = data?.[0]?.inventory_id;
         }
 
@@ -514,8 +498,6 @@
         await bootToInventory(inventoryId);
         return true;
       } catch (e) {
-        console.error(e);
-        // Se falhar, evita overlay preso e avisa
         clearPendingSetup();
         showRegister();
         toast("Logado ✅ mas falhou ao finalizar inventário: " + (e?.message || e), "warn", "finalize-fail");
@@ -523,43 +505,24 @@
       }
     }
 
-    async function bootFromProfileWithRetry(userId) {
-      let lastErr = null;
+    async function bootFromProfile(user) {
+      if (await finalizePendingSetupIfNeeded(user)) return;
 
-      for (let i = 0; i < 4; i++) {
-        try {
-          // se tem pending (cadastro), finaliza antes
-          if (await finalizePendingSetupIfNeeded({ id: userId })) return;
+      const { data: prof, error } = await supabase
+        .from("profiles")
+        .select("current_inventory_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-          const { data: prof, error } = await withTimeout(
-            supabase
-              .from("profiles")
-              .select("current_inventory_id")
-              .eq("user_id", userId)
-              .maybeSingle(),
-            9000,
-            "load profile"
-          );
+      if (error) throw error;
 
-          if (error) throw error;
-
-          if (!prof?.current_inventory_id) {
-            // sem inventário, manda pro registro (não cria automático aqui)
-            showRegister();
-            toast("Você está logado. Agora gere um inventário ou informe um código.", "warn", "need-inv");
-            return;
-          }
-
-          await bootToInventory(prof.current_inventory_id);
-          return;
-
-        } catch (e) {
-          lastErr = e;
-          await sleep(300 + i * 250);
-        }
+      if (!prof?.current_inventory_id) {
+        showRegister();
+        toast("Você está logado. Agora gere um inventário ou informe um código.", "warn", "need-inv");
+        return;
       }
 
-      throw lastErr || new Error("Falha ao iniciar.");
+      await bootToInventory(prof.current_inventory_id);
     }
 
     // ===== UI events =====
@@ -567,29 +530,17 @@
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
-    // LOGIN: só autentica (o boot é disparado no onAuthStateChange)
     $("loginBtn").onclick = async () => {
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
 
-      overlaySafe(true, "login");
-      try {
-        const { error } = await withTimeout(
-          supabase.auth.signInWithPassword({ email, password }),
-          9000,
-          "login"
-        );
-        if (error) return toast(error.message, "error", "login-error");
+      await runTask("Login", async () => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
         toast("Logado ✅", "success", "logged");
-      } catch (e) {
-        console.error(e);
-        toast("Falha no login: " + (e?.message || e), "error", "login-fail");
-      } finally {
-        overlaySafe(false, "login");
-      }
+      }, { showOverlay: true, timeoutMs: 9000 });
     };
 
-    // REGISTER
     $("registerBtn").onclick = async () => {
       const displayName = $("regName").value.trim();
       const email = $("regEmail").value.trim();
@@ -602,31 +553,16 @@
       if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warn", "reg-pass");
       if (!gen && !code) return toast("Informe o código do inventário.", "warn", "reg-code");
 
-      setPendingSetup({
-        displayName,
-        mode: gen ? "create" : "join",
-        code: gen ? "" : code,
-        createdAt: Date.now(),
-      });
+      setPendingSetup({ displayName, mode: gen ? "create" : "join", code: gen ? "" : code, createdAt: Date.now() });
 
-      overlaySafe(true, "register");
-      try {
-        const { data, error } = await withTimeout(
-          supabase.auth.signUp({
-            email,
-            password,
-            options: { emailRedirectTo: APP_URL },
-          }),
-          9000,
-          "signUp"
-        );
+      await runTask("Criar conta", async () => {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: APP_URL },
+        });
+        if (error) throw error;
 
-        if (error) {
-          clearPendingSetup();
-          return toast(error.message, "error", "signup-error");
-        }
-
-        // Se não veio session (confirm email ON), avisa e volta pro login
         if (!data?.session?.user) {
           toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
           showLogin();
@@ -634,28 +570,19 @@
         }
 
         toast("Conta criada ✅", "success", "signup-ok");
-        // boot vai acontecer via onAuthStateChange
-      } catch (e) {
-        console.error(e);
-        clearPendingSetup();
-        toast("Falha no cadastro: " + (e?.message || e), "error", "signup-fail");
-      } finally {
-        overlaySafe(false, "register");
-      }
+      }, { showOverlay: true, timeoutMs: 9000 });
     };
 
     $("logoutBtn").onclick = async () => {
-      overlaySafe(true, "logout");
-      try {
+      await runTask("Sair", async () => {
         await stopRealtime();
-        await supabase.auth.signOut();
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
         currentInventoryId = null;
         items = [];
         showLogin();
         toast("Saiu.", "warn", "logout");
-      } finally {
-        overlaySafe(false, "logout");
-      }
+      }, { showOverlay: true, timeoutMs: 9000 });
     };
 
     $("invCodeShow").onclick = async () => {
@@ -681,17 +608,17 @@
     };
 
     $("export").onclick = () => {
-      const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
+      const payload = { version: 1, exportedAt: new Date().toISOString(), items };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "inventario.json";
+      a.download = "inventario-backup.json";
       a.click();
       URL.revokeObjectURL(url);
       toast("Exportado ✅", "success", "export");
     };
 
-    // IMPORT (com overlaySafe)
     $("import").onclick = async () => {
       const inp = document.createElement("input");
       inp.type = "file";
@@ -701,23 +628,19 @@
         const file = inp.files?.[0];
         if (!file) return;
 
-        overlaySafe(true, "import");
-        try {
+        await runTask("Importar", async () => {
           const text = await file.text();
-          const data = JSON.parse(text);
-          if (!Array.isArray(data)) return toast("Arquivo inválido.", "error", "import-invalid");
+          const parsed = JSON.parse(text);
 
-          items = data;
+          const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : null);
+          if (!Array.isArray(arr)) throw new Error("Arquivo inválido.");
+
+          const normalized = arr.map(normalizeItem).filter(Boolean);
+          items = normalized;
           render();
-
           await saveNow(items);
           toast("Importado ✅", "success", "import-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Falha ao importar: " + (e?.message || e), "error", "import-fail");
-        } finally {
-          overlaySafe(false, "import");
-        }
+        }, { showOverlay: true, timeoutMs: 12000 });
       };
 
       inp.click();
@@ -725,47 +648,60 @@
 
     $("clear").onclick = async () => {
       if (!confirm("Tem certeza que quer zerar tudo?")) return;
-      overlaySafe(true, "clear");
-      try {
+
+      await runTask("Zerar", async () => {
         items = [];
         render();
         await saveNow(items);
         toast("Zerado ✅", "success", "clear-ok");
-      } finally {
-        overlaySafe(false, "clear");
-      }
+      }, { showOverlay: true, timeoutMs: 9000 });
     };
 
-    // ===== auth source of truth =====
-    let booting = false;
+    // ===== auth source of truth (sem loop infinito) =====
+    let unsub = null;
+    let bootLock = false;
 
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (booting) return;
+    function attachAuthListener() {
+      if (unsub) return;
 
-      if (!session?.user) {
-        overlay(false);
-        showLogin();
-        return;
-      }
+      const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (!session?.user) {
+          bootLock = false;
+          overlay(false);
+          showLogin();
+          return;
+        }
 
-      booting = true;
-      overlaySafe(true, "authStateChange");
-      try {
-        await bootFromProfileWithRetry(session.user.id);
-      } catch (e) {
-        console.error(e);
-        showRegister();
-        toast("Logado ✅ mas falhou ao sincronizar: " + (e?.message || e), "warn", "boot-fail");
-      } finally {
-        overlaySafe(false, "authStateChange");
-        booting = false;
-      }
-    });
+        if (bootLock) return;
+        bootLock = true;
+
+        try {
+          await runTask("Iniciar", () => bootFromProfile(session.user), { showOverlay: true, timeoutMs: 12000 });
+        } catch {
+          showRegister();
+          toast("Logado ✅ mas falhou ao sincronizar. Verifique policies/RPC.", "warn", "boot-fail");
+        } finally {
+          bootLock = false;
+        }
+      });
+
+      unsub = () => data?.subscription?.unsubscribe?.();
+    }
 
     // first paint
     (async () => {
+      attachAuthListener();
+
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) showLogin();
+      if (!session?.user) {
+        showLogin();
+      } else {
+        try {
+          await runTask("Iniciar", () => bootFromProfile(session.user), { showOverlay: true, timeoutMs: 12000 });
+        } catch {
+          showRegister();
+        }
+      }
     })();
   </script>
 </body>
