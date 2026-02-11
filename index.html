@@ -10,8 +10,18 @@
 <body>
   <div id="overlay" class="overlay"><div class="spinner"></div></div>
 
-  <!-- Toast host -->
   <div id="toastHost" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Modal simples (Info do item) -->
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="modal-title" id="modalTitle">Info</div>
+        <button id="modalClose" class="small ghost" type="button">Fechar</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
 
   <!-- ===== AUTH ===== -->
   <div id="authView" class="center-screen">
@@ -77,6 +87,27 @@
         <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
       </div>
 
+      <!-- ===== MEMBROS (hidden / accordion) ===== -->
+      <div class="divider"></div>
+
+      <div class="members-box">
+        <div class="row header-row" style="gap:8px;">
+          <div class="members-title">Membros</div>
+
+          <div class="row" style="gap:8px; justify-content:flex-end; flex: 1;">
+            <button id="toggleMembersBtn" class="small ghost" type="button">Mostrar membros</button>
+            <button id="reloadMembersBtn" class="small ghost hidden" type="button">Atualizar</button>
+          </div>
+        </div>
+
+        <div id="membersWrap" class="hidden">
+          <div class="muted" style="margin-top:4px;">
+            ⭐ = dono. (visualização apenas por enquanto)
+          </div>
+          <div id="membersList" class="members-list"></div>
+        </div>
+      </div>
+
       <div class="divider"></div>
 
       <div class="row">
@@ -85,6 +116,7 @@
 
       <div class="divider"></div>
 
+      <!-- ADD / EDIT -->
       <div class="row">
         <input id="name" placeholder="Novo item:" />
         <select id="unit">
@@ -97,9 +129,10 @@
         <input id="qty" type="number" step="0.1" placeholder="Qtd" class="w120" />
         <input id="min" type="number" step="0.1" placeholder="Mín" class="w120" />
         <button id="add">Adicionar</button>
+        <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
       </div>
 
-      <div class="muted">
+      <div class="muted" id="editHint">
         Dica: O “Mín” (mínimo) emite um alerta ao chegar na quantidade definida.
       </div>
 
@@ -116,7 +149,7 @@
     </div>
   </div>
 
-  <!-- Footer em todas as telas -->
+  <!-- Footer -->
   <footer id="footer" class="footer"></footer>
 
   <script type="module">
@@ -134,20 +167,16 @@
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
 
-    // ===== Footer =====
-    const footerEl = $("footer");
-    if (footerEl) {
-      footerEl.innerHTML = `© ${new Date().getFullYear()}
-        <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
-        — Todos os direitos reservados`;
-    }
+    // Footer
+    $("footer").innerHTML = `© ${new Date().getFullYear()}
+      <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
+      — Todos os direitos reservados`;
 
     // ===== Toast =====
     const lastToastAt = new Map();
     function toast(message, type = "warn", key = "") {
       const msg = (message || "").toString().trim();
       if (!msg) return;
-
       const k = key || (type + ":" + msg);
       const now = Date.now();
       const last = lastToastAt.get(k) || 0;
@@ -157,20 +186,16 @@
       const host = $("toastHost");
       const wrap = document.createElement("div");
       wrap.className = `toast ${type}`;
-
       const bubble = document.createElement("div");
       bubble.className = "toast-bubble";
       bubble.textContent = msg;
-
       wrap.appendChild(bubble);
       host.appendChild(wrap);
-
       requestAnimationFrame(() => wrap.classList.add("show"));
       setTimeout(() => wrap.classList.add("hide"), 3200);
       setTimeout(() => wrap.remove(), 3800);
     }
 
-    // ===== Overlay =====
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
 
     function withTimeout(promise, ms, label = "operação") {
@@ -182,11 +207,29 @@
       ]);
     }
 
-    async function runTask(label, fn, { showOverlay = true, timeoutMs = 12000 } = {}) {
+    function isAbortError(e) {
+      const msg = (e?.message || "").toLowerCase();
+      return e?.name === "AbortError" || msg.includes("signal is aborted") || msg.includes("aborted");
+    }
+
+    async function runTask(label, fn, { showOverlay = true, timeoutMs = 12000, retryOnAbort = true } = {}) {
       if (showOverlay) overlay(true);
       try {
         return await withTimeout(fn(), timeoutMs, label);
       } catch (e) {
+        if (retryOnAbort && isAbortError(e)) {
+          console.warn(label, "AbortError -> retry once");
+          try {
+            return await withTimeout(fn(), timeoutMs, label);
+          } catch (e2) {
+            console.error(label, e2);
+            toast(`${label}: ${e2?.message || e2}`, "error", "err:" + label);
+            throw e2;
+          } finally {
+            if (showOverlay) overlay(false);
+          }
+        }
+
         console.error(label, e);
         toast(`${label}: ${e?.message || e}`, "error", "err:" + label);
         throw e;
@@ -194,6 +237,23 @@
         if (showOverlay) overlay(false);
       }
     }
+
+    // ===== Modal =====
+    function openModal(title, html) {
+      $("modalTitle").textContent = title || "Info";
+      $("modalBody").innerHTML = html || "";
+      $("modal").classList.remove("hidden");
+      $("modal").setAttribute("aria-hidden", "false");
+    }
+    function closeModal() {
+      $("modal").classList.add("hidden");
+      $("modal").setAttribute("aria-hidden", "true");
+      $("modalBody").innerHTML = "";
+    }
+    $("modalClose").onclick = closeModal;
+    $("modal").addEventListener("click", (e) => {
+      if (e.target && e.target.id === "modal") closeModal();
+    });
 
     window.addEventListener("unhandledrejection", (e) => {
       console.error("unhandledrejection:", e?.reason);
@@ -242,18 +302,26 @@
 
     // ===== state =====
     let items = [];
+    let members = [];
     let saveTimer = null;
     let currentInventoryId = null;
     let realtimeChannel = null;
     let showOnlyNeeds = false;
 
-    // ✅ anti-race: quando cadastro está acontecendo, ignora onAuthStateChange
-    let authFlowBusy = false;
+    // edição de item
+    let editingId = null;
 
     function needsBuy(it) {
       const qty = Number(it.qty ?? 0);
       const min = Number(it.min_qty ?? 0);
       return qty <= 0 || (min > 0 && qty <= min);
+    }
+
+    function fmtDate(ts) {
+      try {
+        const d = new Date(ts);
+        return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      } catch { return String(ts || ""); }
     }
 
     function normalizeItem(raw) {
@@ -263,6 +331,7 @@
       const min_qty = round(Number(raw?.min_qty ?? 0));
       if (!name) return null;
 
+      const history = Array.isArray(raw?.history) ? raw.history.slice(0, 2) : [];
       return {
         id: raw?.id || crypto.randomUUID(),
         name,
@@ -270,10 +339,60 @@
         unit,
         qty: Math.max(0, qty),
         min_qty: Math.max(0, min_qty),
+        history
       };
     }
 
-    function render() {
+    function pushHistory(it, delta, qtyAfter) {
+      const entry = { ts: new Date().toISOString(), delta: round(delta), qty_after: round(qtyAfter) };
+      const h = Array.isArray(it.history) ? it.history : [];
+      it.history = [entry, ...h].slice(0, 2);
+    }
+
+    // ===== members accordion =====
+    function setMembersOpen(open) {
+      $("membersWrap").classList.toggle("hidden", !open);
+      $("reloadMembersBtn").classList.toggle("hidden", !open);
+      $("toggleMembersBtn").textContent = open ? "Esconder membros" : "Mostrar membros";
+    }
+    $("toggleMembersBtn").onclick = () => {
+      const open = $("membersWrap").classList.contains("hidden");
+      setMembersOpen(open);
+      if (open && currentInventoryId) {
+        tryLoadMembers(currentInventoryId);
+      }
+    };
+
+    function renderMembers() {
+      const box = $("membersList");
+      box.innerHTML = "";
+
+      if (!members.length) {
+        const empty = document.createElement("div");
+        empty.className = "sub";
+        empty.textContent = "Sem membros carregados (ou sem permissão).";
+        box.appendChild(empty);
+        return;
+      }
+
+      members
+        .slice()
+        .sort((a,b) =>
+          (a.role === "owner" ? -1 : 1) - (b.role === "owner" ? -1 : 1) ||
+          (a.display_name||"").localeCompare((b.display_name||""), "pt-BR")
+        )
+        .forEach(m => {
+          const row = document.createElement("div");
+          row.className = "member-row";
+          row.innerHTML = `
+            <div class="member-name">${m.display_name || "Usuário"} ${m.role === "owner" ? "⭐" : ""}</div>
+            <div class="member-sub">${m.role || "member"}</div>
+          `;
+          box.appendChild(row);
+        });
+    }
+
+    function renderItems() {
       const q = norm($("search").value);
       const list = $("list");
       list.innerHTML = "";
@@ -300,7 +419,6 @@
 
         const left = document.createElement("div");
         const needs = needsBuy(it);
-
         left.innerHTML = `
           <div class="name">${it.name}</div>
           <div class="sub">
@@ -316,6 +434,12 @@
         minus.textContent = "−";
         minus.onclick = () => updateQty(it.id, it.unit === "un" ? -1 : -0.1);
 
+        const gear = document.createElement("button");
+        gear.className = "iconbtn";
+        gear.title = "Editar item";
+        gear.textContent = "⚙️";
+        gear.onclick = () => startEditItem(it.id);
+
         const qtyEl = document.createElement("div");
         qtyEl.className = "qty pill";
         qtyEl.textContent = `${it.qty} ${it.unit}`;
@@ -324,62 +448,112 @@
         plus.textContent = "+";
         plus.onclick = () => updateQty(it.id, it.unit === "un" ? +1 : +0.1);
 
+        const info = document.createElement("button");
+        info.className = "iconbtn";
+        info.title = "Info / histórico";
+        info.textContent = "ℹ️";
+        info.onclick = () => showItemInfo(it.id);
+
         const del = document.createElement("button");
+        del.className = "iconbtn";
         del.textContent = "🗑️";
         del.title = "Remover";
         del.onclick = () => removeItem(it.id);
 
-        controls.append(minus, qtyEl, plus, del);
+        controls.append(minus, gear, qtyEl, plus, info, del);
         row.append(left, controls);
         list.appendChild(row);
       }
     }
 
+    function startEditItem(id) {
+      const it = items.find(x => x.id === id);
+      if (!it) return;
+
+      editingId = id;
+      $("name").value = it.name;
+      $("unit").value = it.unit;
+      $("qty").value = it.qty;
+      $("min").value = it.min_qty ?? 0;
+
+      $("add").textContent = "Atualizar";
+      $("cancelEdit").classList.remove("hidden");
+      $("editHint").textContent = "Modo edição: altere os campos e toque em Atualizar.";
+      toast("Editando: " + it.name, "warn", "edit-start");
+      try { $("name").scrollIntoView({ behavior: "smooth", block: "center" }); } catch {}
+      $("name").focus();
+    }
+
+    function cancelEdit() {
+      editingId = null;
+      $("name").value = "";
+      $("qty").value = "";
+      $("min").value = "";
+      $("add").textContent = "Adicionar";
+      $("cancelEdit").classList.add("hidden");
+      $("editHint").textContent = "Dica: O “Mín” (mínimo) emite um alerta ao chegar na quantidade definida.";
+    }
+    $("cancelEdit").onclick = cancelEdit;
+
+    function showItemInfo(id) {
+      const it = items.find(x => x.id === id);
+      if (!it) return;
+
+      const h = Array.isArray(it.history) ? it.history : [];
+      const histHtml = h.length
+        ? `<div class="hist">
+            ${h.map(x => `
+              <div class="hist-row">
+                <div class="hist-date">${fmtDate(x.ts)}</div>
+                <div class="hist-delta">Δ ${x.delta} (${it.unit})</div>
+              </div>
+            `).join("")}
+          </div>`
+        : `<div class="sub">Sem histórico ainda.</div>`;
+
+      openModal(
+        "Info do item",
+        `
+          <div class="info-grid">
+            <div><b>Nome:</b> ${it.name}</div>
+            <div><b>Qtd:</b> ${it.qty} ${it.unit}</div>
+            <div><b>Mín:</b> ${it.min_qty || 0}</div>
+          </div>
+          <div class="divider" style="margin:12px 0;"></div>
+          <div class="sub" style="margin-bottom:8px;">Últimas 2 alterações (data + quantia adicionada/alterada):</div>
+          ${histHtml}
+        `
+      );
+    }
+
     // ===== cloud helpers =====
-    async function loadInventory(inventoryId) {
+    async function loadInventory(invId) {
       const { data, error } = await supabase
         .from("inventories")
         .select("items, invite_code")
-        .eq("id", inventoryId)
+        .eq("id", invId)
         .single();
-
       if (error) throw error;
       return data;
     }
 
-    async function saveInventoryItems(inventoryId, arr) {
+    async function saveInventoryItems(invId, arr) {
       const { error } = await supabase
         .from("inventories")
         .update({ items: arr, updated_at: new Date().toISOString() })
-        .eq("id", inventoryId);
-
+        .eq("id", invId);
       if (error) throw error;
     }
 
-    // ✅ FIX: timeout “falso” no 3G/4G
     async function saveNow(arr, quiet = false) {
       if (!currentInventoryId) return;
       saveLocal(currentInventoryId, arr);
 
       try {
-        await runTask("Salvar", () => saveInventoryItems(currentInventoryId, arr), {
-          showOverlay: false,
-          timeoutMs: 30000
-        });
+        await runTask("Salvar", () => saveInventoryItems(currentInventoryId, arr), { showOverlay: false, timeoutMs: 30000, retryOnAbort: true });
         if (!quiet) toast("Salvo ✅", "success", "saved");
       } catch (e) {
-        const msg = (e?.message || "").toLowerCase();
-        if (msg.includes("timeout")) {
-          toast("Salvando… (rede lenta)", "warn", "save-slow");
-          setTimeout(async () => {
-            try {
-              await saveInventoryItems(currentInventoryId, arr);
-              toast("Salvo ✅", "success", "saved-late");
-            } catch {}
-          }, 800);
-          return;
-        }
-        toast("Não salvou no cloud: " + (e?.message || e), "error", "save-error");
+        if (!quiet) toast("Não salvou no cloud (rede/perm): " + (e?.message || e), "warn", "save-warn");
       }
     }
 
@@ -390,25 +564,59 @@
       saveTimer = setTimeout(() => saveNow(arr, true), 250);
     }
 
-    async function addItem() {
+    async function addOrUpdateFromForm() {
       const name = $("name").value.trim();
       const unit = $("unit").value;
-      const qty = Number($("qty").value || 0);
-      const minQty = Number($("min").value || 0);
+      const qty = round(Number($("qty").value || 0));
+      const minQty = round(Number($("min").value || 0));
       if (!name) return;
+
+      if (editingId) {
+        const it = items.find(x => x.id === editingId);
+        if (!it) { cancelEdit(); return; }
+
+        const oldQty = Number(it.qty ?? 0);
+
+        it.name = name;
+        it.name_norm = norm(name);
+        it.unit = unit;
+        it.min_qty = Math.max(0, minQty);
+        it.qty = Math.max(0, qty);
+
+        const delta = it.qty - oldQty;
+        pushHistory(it, delta, it.qty);
+
+        renderItems();
+        await saveNow(items);
+        toast("Atualizado ✅", "success", "edit-ok");
+        cancelEdit();
+        return;
+      }
 
       const n = norm(name);
       const existing = items.find(x => x.name_norm === n && x.unit === unit);
 
       if (existing) {
-        existing.qty = round(existing.qty + qty);
+        const oldQty = Number(existing.qty ?? 0);
+        existing.qty = round(oldQty + qty);
         existing.min_qty = (minQty || minQty === 0) ? minQty : (existing.min_qty || 0);
+        pushHistory(existing, qty, existing.qty);
       } else {
-        items.push({ id: crypto.randomUUID(), name, name_norm: n, unit, qty: round(qty || 0), min_qty: round(minQty || 0) });
+        const newItem = {
+          id: crypto.randomUUID(),
+          name,
+          name_norm: n,
+          unit,
+          qty: Math.max(0, qty),
+          min_qty: Math.max(0, minQty),
+          history: []
+        };
+        pushHistory(newItem, qty, newItem.qty);
+        items.push(newItem);
       }
 
       $("name").value = ""; $("qty").value = ""; $("min").value = "";
-      render();
+      renderItems();
       await saveNow(items);
     }
 
@@ -416,59 +624,89 @@
       const it = items.find(x => x.id === id);
       if (!it) return;
       it.qty = round(Math.max(0, Number(it.qty) + Number(delta)));
-      render();
+      renderItems();
       saveDebounced(items);
     }
 
     async function removeItem(id) {
       items = items.filter(x => x.id !== id);
-      render();
+      renderItems();
       await saveNow(items);
     }
 
-    // ===== realtime =====
-    async function startRealtime(inventoryId) {
+    // ===== realtime items =====
+    async function startItemsRealtime(invId) {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
 
       realtimeChannel = supabase
-        .channel("inv-" + inventoryId)
+        .channel("inv-" + invId)
         .on("postgres_changes", {
           event: "*",
           schema: "public",
           table: "inventories",
-          filter: `id=eq.${inventoryId}`,
+          filter: `id=eq.${invId}`,
         }, (payload) => {
           const newItems = payload?.new?.items;
           if (Array.isArray(newItems)) {
-            items = newItems;
-            saveLocal(inventoryId, items);
-            render();
+            items = newItems.map(normalizeItem).filter(Boolean);
+            saveLocal(invId, items);
+            renderItems();
           }
         })
         .subscribe();
     }
 
-    async function stopRealtime() {
+    async function stopItemsRealtime() {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
       realtimeChannel = null;
     }
 
-    async function bootToInventory(inventoryId) {
-      currentInventoryId = inventoryId;
+    // ===== members load (visualização) =====
+    async function tryLoadMembers(invId) {
+      try {
+        const { data, error } = await supabase
+          .from("inventory_members")
+          .select("user_id, role, display_name, created_at")
+          .eq("inventory_id", invId);
 
-      items = loadLocal(inventoryId) || [];
-      showApp();
-      render();
-
-      const data = await runTask("Sincronizar", () => loadInventory(inventoryId), { showOverlay: true, timeoutMs: 25000 });
-      if (Array.isArray(data?.items)) {
-        items = data.items;
-        saveLocal(inventoryId, items);
+        if (error) throw error;
+        members = Array.isArray(data) ? data : [];
+        renderMembers();
+      } catch (e) {
+        members = [];
+        renderMembers();
       }
-      $("invCodeShow").textContent = data?.invite_code || "(sem código)";
-      render();
+    }
 
-      await startRealtime(inventoryId);
+    $("reloadMembersBtn").onclick = () => {
+      if (!currentInventoryId) return;
+      tryLoadMembers(currentInventoryId);
+      toast("Atualizando membros…", "warn", "mem-reload");
+    };
+
+    async function bootToInventory(invId) {
+      currentInventoryId = invId;
+
+      items = (loadLocal(invId) || []).map(normalizeItem).filter(Boolean);
+      showApp();
+      renderItems();
+
+      const data = await runTask("Sincronizar", () => loadInventory(invId), { showOverlay: true, timeoutMs: 25000, retryOnAbort: true });
+
+      if (Array.isArray(data?.items)) {
+        items = data.items.map(normalizeItem).filter(Boolean);
+        saveLocal(invId, items);
+      }
+
+      $("invCodeShow").textContent = data?.invite_code || "(sem código)";
+      renderItems();
+
+      // membros: só carrega se estiver aberto
+      if (!$("membersWrap").classList.contains("hidden")) {
+        await tryLoadMembers(invId);
+      }
+
+      await startItemsRealtime(invId);
       toast("Sincronizado ✅", "success", "synced");
     }
 
@@ -478,18 +716,16 @@
     const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
     const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
 
-    async function finalizePendingSetupIfNeeded(user, { silent = false } = {}) {
+    async function finalizePendingSetupIfNeeded(user) {
       const pending = getPendingSetup();
       if (!pending) return false;
 
       try {
-        await runTask("Criar perfil", async () => {
-          const { error } = await supabase.from("profiles").upsert({
-            user_id: user.id,
-            display_name: pending.displayName || "Usuário",
-          });
-          if (error) throw error;
-        }, { showOverlay: true, timeoutMs: 20000 });
+        const { error: pErr } = await supabase.from("profiles").upsert({
+          user_id: user.id,
+          display_name: pending.displayName || "Usuário",
+        });
+        if (pErr) throw pErr;
 
         let inventoryId = null;
 
@@ -517,23 +753,22 @@
 
       } catch (e) {
         clearPendingSetup();
-        if (!silent) {
-          showRegister();
-          toast("Logado ✅ mas falhou ao finalizar inventário: " + (e?.message || e), "warn", "finalize-fail");
+        if (isAbortError(e)) {
+          toast("Rede instável. Atualize a página e tente de novo.", "warn", "abort-pending");
+          showLogin();
+          return true;
         }
-        return false;
+        showRegister();
+        toast("Logado ✅ mas falhou ao finalizar inventário: " + (e?.message || e), "warn", "finalize-fail");
+        return true;
       }
     }
 
-    async function bootFromProfile(user) {
-      // se tem pending, finaliza
-      const did = await finalizePendingSetupIfNeeded(user, { silent: true });
-      if (did) return;
-
+    async function bootFromProfile(userId) {
       const { data: prof, error } = await supabase
         .from("profiles")
         .select("current_inventory_id")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .maybeSingle();
 
       if (error) throw error;
@@ -552,7 +787,6 @@
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
 
-    // LOGIN
     $("loginBtn").onclick = async () => {
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
@@ -561,10 +795,9 @@
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast("Logado ✅", "success", "logged");
-      }, { showOverlay: true, timeoutMs: 20000 });
+      }, { showOverlay: true, timeoutMs: 20000, retryOnAbort: true });
     };
 
-    // REGISTER (✅ anti-race + finaliza na hora)
     $("registerBtn").onclick = async () => {
       const displayName = $("regName").value.trim();
       const email = $("regEmail").value.trim();
@@ -579,51 +812,41 @@
 
       setPendingSetup({ displayName, mode: gen ? "create" : "join", code: gen ? "" : code, createdAt: Date.now() });
 
-      authFlowBusy = true; // ✅ impede o onAuthStateChange de disparar boot junto
+      await runTask("Criar conta", async () => {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: APP_URL },
+        });
+        if (error) { clearPendingSetup(); throw error; }
 
-      try {
-        await runTask("Criar conta", async () => {
-          const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: { emailRedirectTo: APP_URL },
-          });
-          if (error) {
-            clearPendingSetup();
-            throw error;
-          }
+        if (!data?.session?.user) {
+          clearPendingSetup();
+          toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
+          showLogin();
+          return;
+        }
 
-          const user = data?.session?.user;
-          if (!user) {
-            toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
-            showLogin();
-            return;
-          }
-
-          await runTask("Preparar inventário", async () => {
-            const ok = await finalizePendingSetupIfNeeded(user, { silent: false });
-            if (!ok) throw new Error("Não consegui finalizar inventário.");
-          }, { showOverlay: true, timeoutMs: 30000 });
-
-          toast("Tudo pronto ✅", "success", "ready");
-        }, { showOverlay: true, timeoutMs: 30000 });
-
-      } finally {
-        // dá um respiro pro auth listener não entrar logo depois
-        setTimeout(() => { authFlowBusy = false; }, 1200);
-      }
+        await runTask("Preparar inventário", async () => {
+          const ok = await finalizePendingSetupIfNeeded(data.session.user);
+          if (!ok) throw new Error("Não consegui finalizar inventário.");
+        }, { showOverlay: true, timeoutMs: 30000, retryOnAbort: true });
+      }, { showOverlay: true, timeoutMs: 30000, retryOnAbort: true });
     };
 
     $("logoutBtn").onclick = async () => {
       await runTask("Sair", async () => {
-        await stopRealtime();
+        await stopItemsRealtime();
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
         currentInventoryId = null;
         items = [];
+        members = [];
+        cancelEdit();
+        setMembersOpen(false);
         showLogin();
         toast("Saiu.", "warn", "logout");
-      }, { showOverlay: true, timeoutMs: 20000 });
+      }, { showOverlay: true, timeoutMs: 20000, retryOnAbort: true });
     };
 
     $("invCodeShow").onclick = async () => {
@@ -637,19 +860,19 @@
       }
     };
 
-    $("add").onclick = addItem;
-    $("search").addEventListener("input", render);
-    $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
+    $("add").onclick = addOrUpdateFromForm;
+    $("search").addEventListener("input", renderItems);
+    $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addOrUpdateFromForm(); });
 
     $("filterList").onclick = () => {
       showOnlyNeeds = !showOnlyNeeds;
       $("filterList").classList.toggle("active", showOnlyNeeds);
       $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
-      render();
+      renderItems();
     };
 
     $("export").onclick = () => {
-      const payload = { version: 1, exportedAt: new Date().toISOString(), items };
+      const payload = { version: 2, exportedAt: new Date().toISOString(), items };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -676,12 +899,12 @@
           const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : null);
           if (!Array.isArray(arr)) throw new Error("Arquivo inválido.");
 
-          const normalized = arr.map(normalizeItem).filter(Boolean);
-          items = normalized;
-          render();
+          items = arr.map(normalizeItem).filter(Boolean);
+          cancelEdit();
+          renderItems();
           await saveNow(items);
           toast("Importado ✅", "success", "import-ok");
-        }, { showOverlay: true, timeoutMs: 30000 });
+        }, { showOverlay: true, timeoutMs: 30000, retryOnAbort: true });
       };
 
       inp.click();
@@ -689,54 +912,55 @@
 
     $("clear").onclick = async () => {
       if (!confirm("Tem certeza que quer zerar tudo?")) return;
-
       await runTask("Zerar", async () => {
         items = [];
-        render();
+        cancelEdit();
+        renderItems();
         await saveNow(items);
         toast("Zerado ✅", "success", "clear-ok");
-      }, { showOverlay: true, timeoutMs: 25000 });
+      }, { showOverlay: true, timeoutMs: 25000, retryOnAbort: true });
     };
 
-    // ===== auth listener =====
-    let bootLock = false;
+    // ===== auth source of truth =====
+    let booting = false;
 
     supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (authFlowBusy) return; // ✅ evita corrida com register flow
+      if (booting) return;
 
       if (!session?.user) {
-        bootLock = false;
         overlay(false);
         showLogin();
         return;
       }
 
-      if (bootLock) return;
-      bootLock = true;
-
+      booting = true;
       try {
-        await runTask("Iniciar", () => bootFromProfile(session.user), { showOverlay: true, timeoutMs: 25000 });
-      } catch {
-        showRegister();
-        toast("Logado ✅ mas falhou ao sincronizar. Verifique policies/RPC.", "warn", "boot-fail");
+        const did = await finalizePendingSetupIfNeeded(session.user);
+        if (did) return;
+
+        await runTask("Iniciar", () => bootFromProfile(session.user.id), { showOverlay: true, timeoutMs: 25000, retryOnAbort: true });
+      } catch (e) {
+        console.error(e);
+        if (isAbortError(e)) {
+          toast("Rede instável (Abort). Atualize a página e tente de novo.", "warn", "abort-boot");
+          showLogin();
+        } else {
+          showRegister();
+          toast("Logado ✅ mas falhou ao sincronizar. Verifique policies/RPC.", "warn", "boot-fail");
+        }
       } finally {
-        bootLock = false;
+        booting = false;
       }
     });
 
     // first paint
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        showLogin();
-      } else {
-        try {
-          await runTask("Iniciar", () => bootFromProfile(session.user), { showOverlay: true, timeoutMs: 25000 });
-        } catch {
-          showRegister();
-        }
-      }
+      if (!session?.user) showLogin();
     })();
+
+    // (membros começa fechado)
+    setMembersOpen(false);
   </script>
 </body>
 </html>
