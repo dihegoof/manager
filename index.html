@@ -9,10 +9,9 @@
 
 <body>
   <div id="overlay" class="overlay"><div class="spinner"></div></div>
-
   <div id="toastHost" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- Modal simples (Info do item) -->
+  <!-- Modal (info do item) -->
   <div id="modal" class="modal hidden" aria-hidden="true">
     <div class="modal-card">
       <div class="modal-head">
@@ -28,7 +27,6 @@
     <div class="card login-card">
       <h1 class="title" id="authTitle">Entrar</h1>
 
-      <!-- LOGIN -->
       <div id="loginForm">
         <div class="row">
           <input id="loginEmail" placeholder="Email" autocomplete="username" />
@@ -36,14 +34,12 @@
         <div class="row mt10">
           <input id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" />
         </div>
-
         <div class="row mt12">
           <button id="loginBtn">Logar</button>
           <button id="openRegisterBtn" class="small" type="button">Registrar</button>
         </div>
       </div>
 
-      <!-- REGISTER -->
       <div id="registerForm" class="hidden">
         <div class="row">
           <input id="regName" placeholder="Seu nome" autocomplete="name" />
@@ -82,28 +78,26 @@
         <button id="logoutBtn" class="small">Sair</button>
       </div>
 
-      <div class="muted" style="margin-top:6px;">
-        Código do inventário:
-        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
+      <div class="row" style="justify-content:space-between; align-items:center; gap:10px;">
+        <div class="muted" style="margin-top:6px;">
+          Código do inventário:
+          <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
+        </div>
+        <div id="netBadge" class="pill net warn">sincronizando…</div>
       </div>
 
-      <!-- ===== MEMBROS (hidden / accordion) ===== -->
+      <!-- ===== MEMBROS (visu simples) ===== -->
       <div class="divider"></div>
-
       <div class="members-box">
         <div class="row header-row" style="gap:8px;">
           <div class="members-title">Membros</div>
-
-          <div class="row" style="gap:8px; justify-content:flex-end; flex: 1;">
-            <button id="toggleMembersBtn" class="small ghost" type="button">Mostrar membros</button>
+          <div class="row" style="gap:8px; justify-content:flex-end; flex:1;">
+            <button id="toggleMembersBtn" class="small ghost" type="button">Mostrar</button>
             <button id="reloadMembersBtn" class="small ghost hidden" type="button">Atualizar</button>
           </div>
         </div>
-
         <div id="membersWrap" class="hidden">
-          <div class="muted" style="margin-top:4px;">
-            ⭐ = dono. (visualização apenas por enquanto)
-          </div>
+          <div class="muted" style="margin-top:4px;">⭐ = dono • status = último acesso</div>
           <div id="membersList" class="members-list"></div>
         </div>
       </div>
@@ -132,8 +126,15 @@
         <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
       </div>
 
+      <div class="row mt10" style="align-items:center;">
+        <label class="checkline">
+          <input id="confirmBuy" type="checkbox" />
+          Registrar compra (salvar “última compra”)
+        </label>
+      </div>
+
       <div class="muted" id="editHint">
-        Dica: O “Mín” (mínimo) emite um alerta ao chegar na quantidade definida.
+        Dica: marque “Registrar compra” quando você realmente comprou no mercado (isso atualiza o histórico).
       </div>
 
       <div class="divider"></div>
@@ -149,7 +150,6 @@
     </div>
   </div>
 
-  <!-- Footer -->
   <footer id="footer" class="footer"></footer>
 
   <script type="module">
@@ -174,10 +174,16 @@
 
     // ===== Toast =====
     const lastToastAt = new Map();
+    function normalizeToastType(type) {
+      if (type === "success" || type === "error" || type === "warn") return type;
+      return "warn";
+    }
     function toast(message, type = "warn", key = "") {
+      const t = normalizeToastType(type);
       const msg = (message || "").toString().trim();
       if (!msg) return;
-      const k = key || (type + ":" + msg);
+
+      const k = key || (t + ":" + msg);
       const now = Date.now();
       const last = lastToastAt.get(k) || 0;
       if (now - last < 900) return;
@@ -185,18 +191,35 @@
 
       const host = $("toastHost");
       const wrap = document.createElement("div");
-      wrap.className = `toast ${type}`;
+      wrap.className = `toast ${t}`;
+
       const bubble = document.createElement("div");
       bubble.className = "toast-bubble";
       bubble.textContent = msg;
+
       wrap.appendChild(bubble);
       host.appendChild(wrap);
+
       requestAnimationFrame(() => wrap.classList.add("show"));
       setTimeout(() => wrap.classList.add("hide"), 3200);
       setTimeout(() => wrap.remove(), 3800);
     }
 
+    // ===== Overlay =====
     function overlay(on) { $("overlay").classList.toggle("on", !!on); }
+    let overlayTimer = null;
+    function overlaySafe(on, reason = "") {
+      overlay(!!on);
+      clearTimeout(overlayTimer);
+      if (on) {
+        overlayTimer = setTimeout(() => {
+          overlay(false);
+          toast("Sem conexão no momento. Usando cache local.", "warn", "overlay-timeout");
+          console.warn("Overlay timeout:", reason);
+          setNet("offline");
+        }, 12000);
+      }
+    }
 
     function withTimeout(promise, ms, label = "operação") {
       return Promise.race([
@@ -212,30 +235,94 @@
       return e?.name === "AbortError" || msg.includes("signal is aborted") || msg.includes("aborted");
     }
 
-    async function runTask(label, fn, { showOverlay = true, timeoutMs = 12000, retryOnAbort = true } = {}) {
-      if (showOverlay) overlay(true);
+    async function runTask(label, fn, { showOverlay = true, timeoutMs = 0 } = {}) {
+      if (showOverlay) overlaySafe(true, label);
       try {
+        if (!timeoutMs || timeoutMs <= 0) return await fn();
         return await withTimeout(fn(), timeoutMs, label);
       } catch (e) {
-        if (retryOnAbort && isAbortError(e)) {
-          console.warn(label, "AbortError -> retry once");
-          try {
-            return await withTimeout(fn(), timeoutMs, label);
-          } catch (e2) {
-            console.error(label, e2);
-            toast(`${label}: ${e2?.message || e2}`, "error", "err:" + label);
-            throw e2;
-          } finally {
-            if (showOverlay) overlay(false);
-          }
+        if (isAbortError(e)) {
+          console.warn(label, "AbortError (ignorado):", e?.message || e);
+          return null;
         }
-
         console.error(label, e);
         toast(`${label}: ${e?.message || e}`, "error", "err:" + label);
         throw e;
       } finally {
-        if (showOverlay) overlay(false);
+        if (showOverlay) overlaySafe(false, label);
       }
+    }
+
+    window.addEventListener("unhandledrejection", (e) => {
+      console.error("unhandledrejection:", e?.reason);
+      overlaySafe(false, "unhandled");
+      if (!isAbortError(e?.reason)) toast("Erro: " + (e?.reason?.message || e?.reason || "falha"), "error", "unhandled");
+    });
+    window.addEventListener("error", (e) => {
+      console.error("window error:", e?.message, e);
+      overlaySafe(false, "window-error");
+      toast("Erro JS: " + (e?.message || "falha"), "error", "window-error");
+    });
+
+    // ===== Views =====
+    function showLogin() {
+      $("authTitle").textContent = "Entrar";
+      $("loginForm").classList.remove("hidden");
+      $("registerForm").classList.add("hidden");
+      $("authView").classList.remove("hidden");
+      $("appView").classList.add("hidden");
+      $("authView").classList.add("fade-in");
+    }
+    function showRegister() {
+      $("authTitle").textContent = "Registrar";
+      $("loginForm").classList.add("hidden");
+      $("registerForm").classList.remove("hidden");
+      $("authView").classList.remove("hidden");
+      $("appView").classList.add("hidden");
+      syncRegisterUI();
+      $("authView").classList.add("fade-in");
+    }
+    function showApp() {
+      $("authView").classList.add("hidden");
+      $("appView").classList.remove("hidden");
+      $("appView").classList.add("fade-in");
+    }
+    function syncRegisterUI() {
+      const gen = $("genInv").checked;
+      $("invCode").disabled = gen;
+      if (gen) $("invCode").value = "";
+    }
+
+    // ===== Status rede =====
+    function setNet(mode) {
+      const el = $("netBadge");
+      el.classList.remove("good","warn","bad");
+      if (mode === "online") { el.textContent = "online"; el.classList.add("good"); }
+      else if (mode === "offline") { el.textContent = "offline"; el.classList.add("bad"); }
+      else { el.textContent = "sincronizando…"; el.classList.add("warn"); }
+    }
+
+    // ===== local cache =====
+    const KEY_PREFIX = "home_inventory_items_";
+    const loadLocal = (invId) => { try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; } catch { return []; } };
+    const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
+
+    // ===== state =====
+    let currentInventoryId = null;
+    let inviteCode = "";
+    let items = [];
+    let showOnlyNeeds = false;
+    let realtimeChannel = null;
+    let editingId = null;
+    let me = { user_id: null, display_name: "Você" };
+    let membersOpen = false;
+    let membersRefreshTimer = null;
+    let lastSeenTimer = null;
+
+    function needsBuy(it) {
+      const qty = Number(it.qty ?? 0);
+      const min = Number(it.min_qty ?? 0);
+      return qty <= 0 || (min > 0 && qty <= min);
     }
 
     // ===== Modal =====
@@ -251,148 +338,30 @@
       $("modalBody").innerHTML = "";
     }
     $("modalClose").onclick = closeModal;
-    $("modal").addEventListener("click", (e) => {
-      if (e.target && e.target.id === "modal") closeModal();
-    });
-
-    window.addEventListener("unhandledrejection", (e) => {
-      console.error("unhandledrejection:", e?.reason);
-      overlay(false);
-      toast("Erro: " + (e?.reason?.message || e?.reason || "falha"), "error", "unhandled");
-    });
-    window.addEventListener("error", (e) => {
-      console.error("window error:", e?.message, e);
-      overlay(false);
-      toast("Erro: " + (e?.message || "falha"), "error", "window-error");
-    });
-
-    // ===== Views =====
-    function showLogin() {
-      $("authTitle").textContent = "Entrar";
-      $("loginForm").classList.remove("hidden");
-      $("registerForm").classList.add("hidden");
-      $("authView").classList.remove("hidden");
-      $("appView").classList.add("hidden");
-    }
-
-    function showRegister() {
-      $("authTitle").textContent = "Registrar";
-      $("loginForm").classList.add("hidden");
-      $("registerForm").classList.remove("hidden");
-      $("authView").classList.remove("hidden");
-      $("appView").classList.add("hidden");
-      syncRegisterUI();
-    }
-
-    function showApp() {
-      $("authView").classList.add("hidden");
-      $("appView").classList.remove("hidden");
-    }
-
-    function syncRegisterUI() {
-      const gen = $("genInv").checked;
-      $("invCode").disabled = gen;
-      if (gen) $("invCode").value = "";
-    }
-
-    // ===== local cache by inventory =====
-    const KEY_PREFIX = "home_inventory_inv_";
-    const loadLocal = (invId) => { try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; } catch { return []; } };
-    const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
-
-    // ===== state =====
-    let items = [];
-    let members = [];
-    let saveTimer = null;
-    let currentInventoryId = null;
-    let realtimeChannel = null;
-    let showOnlyNeeds = false;
-
-    // edição de item
-    let editingId = null;
-
-    function needsBuy(it) {
-      const qty = Number(it.qty ?? 0);
-      const min = Number(it.min_qty ?? 0);
-      return qty <= 0 || (min > 0 && qty <= min);
-    }
+    $("modal").addEventListener("click", (e) => { if (e.target?.id === "modal") closeModal(); });
 
     function fmtDate(ts) {
-      try {
-        const d = new Date(ts);
-        return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-      } catch { return String(ts || ""); }
+      if (!ts) return "—";
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return "—";
+      return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+    }
+    function relTime(ts) {
+      if (!ts) return "nunca";
+      const d = new Date(ts).getTime();
+      if (!isFinite(d)) return "—";
+      const diff = Date.now() - d;
+      const m = Math.round(diff/60000);
+      if (m < 1) return "agora";
+      if (m < 60) return `há ${m} min`;
+      const h = Math.round(m/60);
+      if (h < 24) return `há ${h} h`;
+      const dd = Math.round(h/24);
+      return `há ${dd} d`;
     }
 
-    function normalizeItem(raw) {
-      const name = (raw?.name || "").toString().trim();
-      const unit = (raw?.unit || "un").toString().trim();
-      const qty = round(Number(raw?.qty ?? 0));
-      const min_qty = round(Number(raw?.min_qty ?? 0));
-      if (!name) return null;
-
-      const history = Array.isArray(raw?.history) ? raw.history.slice(0, 2) : [];
-      return {
-        id: raw?.id || crypto.randomUUID(),
-        name,
-        name_norm: norm(name),
-        unit,
-        qty: Math.max(0, qty),
-        min_qty: Math.max(0, min_qty),
-        history
-      };
-    }
-
-    function pushHistory(it, delta, qtyAfter) {
-      const entry = { ts: new Date().toISOString(), delta: round(delta), qty_after: round(qtyAfter) };
-      const h = Array.isArray(it.history) ? it.history : [];
-      it.history = [entry, ...h].slice(0, 2);
-    }
-
-    // ===== members accordion =====
-    function setMembersOpen(open) {
-      $("membersWrap").classList.toggle("hidden", !open);
-      $("reloadMembersBtn").classList.toggle("hidden", !open);
-      $("toggleMembersBtn").textContent = open ? "Esconder membros" : "Mostrar membros";
-    }
-    $("toggleMembersBtn").onclick = () => {
-      const open = $("membersWrap").classList.contains("hidden");
-      setMembersOpen(open);
-      if (open && currentInventoryId) {
-        tryLoadMembers(currentInventoryId);
-      }
-    };
-
-    function renderMembers() {
-      const box = $("membersList");
-      box.innerHTML = "";
-
-      if (!members.length) {
-        const empty = document.createElement("div");
-        empty.className = "sub";
-        empty.textContent = "Sem membros carregados (ou sem permissão).";
-        box.appendChild(empty);
-        return;
-      }
-
-      members
-        .slice()
-        .sort((a,b) =>
-          (a.role === "owner" ? -1 : 1) - (b.role === "owner" ? -1 : 1) ||
-          (a.display_name||"").localeCompare((b.display_name||""), "pt-BR")
-        )
-        .forEach(m => {
-          const row = document.createElement("div");
-          row.className = "member-row";
-          row.innerHTML = `
-            <div class="member-name">${m.display_name || "Usuário"} ${m.role === "owner" ? "⭐" : ""}</div>
-            <div class="member-sub">${m.role || "member"}</div>
-          `;
-          box.appendChild(row);
-        });
-    }
-
-    function renderItems() {
+    // ===== render =====
+    function render() {
       const q = norm($("search").value);
       const list = $("list");
       list.innerHTML = "";
@@ -435,314 +404,268 @@
         minus.onclick = () => updateQty(it.id, it.unit === "un" ? -1 : -0.1);
 
         const gear = document.createElement("button");
-        gear.className = "iconbtn";
-        gear.title = "Editar item";
         gear.textContent = "⚙️";
-        gear.onclick = () => startEditItem(it.id);
+        gear.title = "Editar item";
+        gear.onclick = () => startEdit(it.id);
 
-        const qtyEl = document.createElement("div");
-        qtyEl.className = "qty pill";
-        qtyEl.textContent = `${it.qty} ${it.unit}`;
+        const info = document.createElement("button");
+        info.textContent = "ℹ️";
+        info.title = "Info / histórico";
+        info.onclick = () => showItemInfo(it);
+
+        const qty = document.createElement("div");
+        qty.className = "qty pill";
+        qty.textContent = `${it.qty} ${it.unit}`;
 
         const plus = document.createElement("button");
         plus.textContent = "+";
         plus.onclick = () => updateQty(it.id, it.unit === "un" ? +1 : +0.1);
 
-        const info = document.createElement("button");
-        info.className = "iconbtn";
-        info.title = "Info / histórico";
-        info.textContent = "ℹ️";
-        info.onclick = () => showItemInfo(it.id);
-
         const del = document.createElement("button");
-        del.className = "iconbtn";
         del.textContent = "🗑️";
         del.title = "Remover";
         del.onclick = () => removeItem(it.id);
 
-        controls.append(minus, gear, qtyEl, plus, info, del);
+        controls.append(minus, gear, info, qty, plus, del);
         row.append(left, controls);
         list.appendChild(row);
       }
     }
 
-    function startEditItem(id) {
-      const it = items.find(x => x.id === id);
-      if (!it) return;
+    function showItemInfo(it) {
+      const buyAt = it.last_buy_at;
+      const zeroAt = it.last_zero_at;
 
-      editingId = id;
-      $("name").value = it.name;
-      $("unit").value = it.unit;
-      $("qty").value = it.qty;
-      $("min").value = it.min_qty ?? 0;
-
-      $("add").textContent = "Atualizar";
-      $("cancelEdit").classList.remove("hidden");
-      $("editHint").textContent = "Modo edição: altere os campos e toque em Atualizar.";
-      toast("Editando: " + it.name, "warn", "edit-start");
-      try { $("name").scrollIntoView({ behavior: "smooth", block: "center" }); } catch {}
-      $("name").focus();
-    }
-
-    function cancelEdit() {
-      editingId = null;
-      $("name").value = "";
-      $("qty").value = "";
-      $("min").value = "";
-      $("add").textContent = "Adicionar";
-      $("cancelEdit").classList.add("hidden");
-      $("editHint").textContent = "Dica: O “Mín” (mínimo) emite um alerta ao chegar na quantidade definida.";
-    }
-    $("cancelEdit").onclick = cancelEdit;
-
-    function showItemInfo(id) {
-      const it = items.find(x => x.id === id);
-      if (!it) return;
-
-      const h = Array.isArray(it.history) ? it.history : [];
-      const histHtml = h.length
-        ? `<div class="hist">
-            ${h.map(x => `
-              <div class="hist-row">
-                <div class="hist-date">${fmtDate(x.ts)}</div>
-                <div class="hist-delta">Δ ${x.delta} (${it.unit})</div>
-              </div>
-            `).join("")}
-          </div>`
-        : `<div class="sub">Sem histórico ainda.</div>`;
+      let dur = "—";
+      if (buyAt && zeroAt) {
+        const a = new Date(buyAt).getTime();
+        const b = new Date(zeroAt).getTime();
+        if (isFinite(a) && isFinite(b) && b >= a) {
+          const days = Math.round((b - a) / (1000*60*60*24));
+          dur = `${days} dia(s)`;
+        }
+      }
 
       openModal(
-        "Info do item",
+        it.name,
         `
           <div class="info-grid">
-            <div><b>Nome:</b> ${it.name}</div>
-            <div><b>Qtd:</b> ${it.qty} ${it.unit}</div>
-            <div><b>Mín:</b> ${it.min_qty || 0}</div>
+            <div><b>Unidade:</b> ${it.unit}</div>
+            <div><b>Qtd atual:</b> ${it.qty}</div>
+            <div><b>Mínimo:</b> ${it.min_qty || 0}</div>
           </div>
-          <div class="divider" style="margin:12px 0;"></div>
-          <div class="sub" style="margin-bottom:8px;">Últimas 2 alterações (data + quantia adicionada/alterada):</div>
-          ${histHtml}
+          <div class="divider"></div>
+          <div class="info-grid">
+            <div><b>Última compra:</b> ${fmtDate(buyAt)}</div>
+            <div><b>Qtd comprada:</b> ${it.last_buy_qty ?? "—"}</div>
+            <div><b>Último zerado:</b> ${fmtDate(zeroAt)}</div>
+            <div><b>Qtd ao zerar:</b> ${it.last_zero_qty ?? "—"}</div>
+            <div><b>Durou:</b> ${dur}</div>
+          </div>
         `
       );
     }
 
-    // ===== cloud helpers =====
-    async function loadInventory(invId) {
+    // ===== DB helpers =====
+    async function loadProfile(userId) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, current_inventory_id, last_seen_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data || null;
+    }
+
+    async function upsertProfileSelf(userId, displayName, currentInventoryId = null) {
+      const payload = { user_id: userId };
+      if (displayName) payload.display_name = displayName;
+      if (currentInventoryId !== undefined) payload.current_inventory_id = currentInventoryId;
+      payload.last_seen_at = new Date().toISOString();
+
+      const { error } = await supabase
+        .from("profiles")
+        .upsert(payload, { onConflict: "user_id" });
+
+      if (error) throw error;
+    }
+
+    async function touchLastSeen() {
+      if (!me?.user_id) return;
+      try {
+        await supabase.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("user_id", me.user_id);
+      } catch {}
+    }
+
+    async function loadInventoryMeta(inventoryId) {
       const { data, error } = await supabase
         .from("inventories")
-        .select("items, invite_code")
-        .eq("id", invId)
+        .select("id, invite_code")
+        .eq("id", inventoryId)
         .single();
       if (error) throw error;
       return data;
     }
 
-    async function saveInventoryItems(invId, arr) {
-      const { error } = await supabase
-        .from("inventories")
-        .update({ items: arr, updated_at: new Date().toISOString() })
-        .eq("id", invId);
+    async function fetchItems(inventoryId) {
+      const { data, error } = await supabase
+        .from("inventory_items")
+        .select("*")
+        .eq("inventory_id", inventoryId);
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    }
+
+    async function insertItem(row) {
+      const { data, error } = await supabase
+        .from("inventory_items")
+        .insert(row)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data;
+    }
+
+    async function updateItem(id, patch) {
+      const { data, error } = await supabase
+        .from("inventory_items")
+        .update(patch)
+        .eq("id", id)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data;
+    }
+
+    async function deleteItem(id) {
+      const { error } = await supabase.from("inventory_items").delete().eq("id", id);
       if (error) throw error;
     }
 
-    async function saveNow(arr, quiet = false) {
-      if (!currentInventoryId) return;
-      saveLocal(currentInventoryId, arr);
-
-      try {
-        await runTask("Salvar", () => saveInventoryItems(currentInventoryId, arr), { showOverlay: false, timeoutMs: 30000, retryOnAbort: true });
-        if (!quiet) toast("Salvo ✅", "success", "saved");
-      } catch (e) {
-        if (!quiet) toast("Não salvou no cloud (rede/perm): " + (e?.message || e), "warn", "save-warn");
-      }
-    }
-
-    function saveDebounced(arr) {
-      if (!currentInventoryId) return;
-      saveLocal(currentInventoryId, arr);
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => saveNow(arr, true), 250);
-    }
-
-    async function addOrUpdateFromForm() {
-      const name = $("name").value.trim();
-      const unit = $("unit").value;
-      const qty = round(Number($("qty").value || 0));
-      const minQty = round(Number($("min").value || 0));
-      if (!name) return;
-
-      if (editingId) {
-        const it = items.find(x => x.id === editingId);
-        if (!it) { cancelEdit(); return; }
-
-        const oldQty = Number(it.qty ?? 0);
-
-        it.name = name;
-        it.name_norm = norm(name);
-        it.unit = unit;
-        it.min_qty = Math.max(0, minQty);
-        it.qty = Math.max(0, qty);
-
-        const delta = it.qty - oldQty;
-        pushHistory(it, delta, it.qty);
-
-        renderItems();
-        await saveNow(items);
-        toast("Atualizado ✅", "success", "edit-ok");
-        cancelEdit();
-        return;
-      }
-
-      const n = norm(name);
-      const existing = items.find(x => x.name_norm === n && x.unit === unit);
-
-      if (existing) {
-        const oldQty = Number(existing.qty ?? 0);
-        existing.qty = round(oldQty + qty);
-        existing.min_qty = (minQty || minQty === 0) ? minQty : (existing.min_qty || 0);
-        pushHistory(existing, qty, existing.qty);
-      } else {
-        const newItem = {
-          id: crypto.randomUUID(),
-          name,
-          name_norm: n,
-          unit,
-          qty: Math.max(0, qty),
-          min_qty: Math.max(0, minQty),
-          history: []
-        };
-        pushHistory(newItem, qty, newItem.qty);
-        items.push(newItem);
-      }
-
-      $("name").value = ""; $("qty").value = ""; $("min").value = "";
-      renderItems();
-      await saveNow(items);
-    }
-
-    function updateQty(id, delta) {
-      const it = items.find(x => x.id === id);
-      if (!it) return;
-      it.qty = round(Math.max(0, Number(it.qty) + Number(delta)));
-      renderItems();
-      saveDebounced(items);
-    }
-
-    async function removeItem(id) {
-      items = items.filter(x => x.id !== id);
-      renderItems();
-      await saveNow(items);
-    }
-
     // ===== realtime items =====
-    async function startItemsRealtime(invId) {
-      if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
+    async function startRealtime(inventoryId) {
+      await stopRealtime();
 
       realtimeChannel = supabase
-        .channel("inv-" + invId)
+        .channel("inv-items-" + inventoryId)
         .on("postgres_changes", {
           event: "*",
           schema: "public",
-          table: "inventories",
-          filter: `id=eq.${invId}`,
+          table: "inventory_items",
+          filter: `inventory_id=eq.${inventoryId}`,
         }, (payload) => {
-          const newItems = payload?.new?.items;
-          if (Array.isArray(newItems)) {
-            items = newItems.map(normalizeItem).filter(Boolean);
-            saveLocal(invId, items);
-            renderItems();
+          const ev = payload?.eventType;
+          if (ev === "INSERT" && payload.new) upsertLocalItem(payload.new);
+          else if (ev === "UPDATE" && payload.new) upsertLocalItem(payload.new);
+          else if (ev === "DELETE" && payload.old) {
+            items = items.filter(x => x.id !== payload.old.id);
+            saveLocal(inventoryId, items);
+            render();
           }
         })
-        .subscribe();
+        .subscribe((status) => { if (status === "SUBSCRIBED") setNet("online"); });
     }
 
-    async function stopItemsRealtime() {
+    async function stopRealtime() {
       if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
       realtimeChannel = null;
     }
 
-    // ===== members load (visualização) =====
-    async function tryLoadMembers(invId) {
-      try {
-        const { data, error } = await supabase
-          .from("inventory_members")
-          .select("user_id, role, display_name, created_at")
-          .eq("inventory_id", invId);
-
-        if (error) throw error;
-        members = Array.isArray(data) ? data : [];
-        renderMembers();
-      } catch (e) {
-        members = [];
-        renderMembers();
-      }
+    function upsertLocalItem(row) {
+      row.name_norm = row.name_norm || norm(row.name);
+      const idx = items.findIndex(x => x.id === row.id);
+      if (idx >= 0) items[idx] = row;
+      else items.push(row);
+      saveLocal(currentInventoryId, items);
+      render();
     }
 
-    $("reloadMembersBtn").onclick = () => {
-      if (!currentInventoryId) return;
-      tryLoadMembers(currentInventoryId);
-      toast("Atualizando membros…", "warn", "mem-reload");
-    };
+    // ===== Boot flow =====
+    async function bootToInventory(inventoryId) {
+      currentInventoryId = inventoryId;
 
-    async function bootToInventory(invId) {
-      currentInventoryId = invId;
-
-      items = (loadLocal(invId) || []).map(normalizeItem).filter(Boolean);
+      items = loadLocal(inventoryId) || [];
       showApp();
-      renderItems();
+      render();
+      setNet(navigator.onLine ? "sync" : "offline");
 
-      const data = await runTask("Sincronizar", () => loadInventory(invId), { showOverlay: true, timeoutMs: 25000, retryOnAbort: true });
+      const meta = await runTask("Sincronizar", async () => {
+        const [m, cloudItems] = await Promise.all([
+          loadInventoryMeta(inventoryId),
+          fetchItems(inventoryId),
+        ]);
+        return { m, cloudItems };
+      }, { showOverlay: false, timeoutMs: 25000 });
 
-      if (Array.isArray(data?.items)) {
-        items = data.items.map(normalizeItem).filter(Boolean);
-        saveLocal(invId, items);
+      if (meta?.m) {
+        inviteCode = meta.m.invite_code || "";
+        $("invCodeShow").textContent = inviteCode || "(sem código)";
+      }
+      if (meta?.cloudItems) {
+        items = meta.cloudItems.map(x => ({ ...x, name_norm: x.name_norm || norm(x.name) }));
+        saveLocal(inventoryId, items);
+        render();
+        setNet("online");
+      } else {
+        setNet(navigator.onLine ? "sync" : "offline");
       }
 
-      $("invCodeShow").textContent = data?.invite_code || "(sem código)";
-      renderItems();
+      if (!document.hidden) await startRealtime(inventoryId);
 
-      // membros: só carrega se estiver aberto
-      if (!$("membersWrap").classList.contains("hidden")) {
-        await tryLoadMembers(invId);
-      }
-
-      await startItemsRealtime(invId);
       toast("Sincronizado ✅", "success", "synced");
+
+      if (membersOpen) await refreshMembers();
+      startPresenceLoop();
     }
 
-    // ===== pending setup =====
-    const PENDING_KEY = "pending_inv_setup_v2";
+    async function bootFromProfile(userId) {
+      const prof = await runTask("Carregar perfil", async () => await loadProfile(userId), { showOverlay: true, timeoutMs: 20000 });
+
+      if (!prof) {
+        await runTask("Criar perfil", async () => await upsertProfileSelf(userId, "Usuário", null), { showOverlay: true, timeoutMs: 20000 });
+        showRegister();
+        toast("Complete seu cadastro (nome + inventário).", "warn", "need-setup");
+        return;
+      }
+
+      me = { user_id: prof.user_id, display_name: prof.display_name || "Você" };
+
+      if (!prof.current_inventory_id) {
+        showRegister();
+        toast("Você está logado. Gere um inventário ou informe um código.", "warn", "need-inv");
+        return;
+      }
+
+      await bootToInventory(prof.current_inventory_id);
+    }
+
+    // ===== Register setup via RPC =====
+    const PENDING_KEY = "pending_inv_setup_v3";
     const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
     const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
     const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
 
-    async function finalizePendingSetupIfNeeded(user) {
+    async function finalizePendingSetupIfNeeded(sessionUser = null) {
       const pending = getPendingSetup();
       if (!pending) return false;
 
+      const user = sessionUser || (await supabase.auth.getUser()).data?.user;
+      if (!user) return false;
+
       try {
-        const { error: pErr } = await supabase.from("profiles").upsert({
-          user_id: user.id,
-          display_name: pending.displayName || "Usuário",
-        });
-        if (pErr) throw pErr;
+        await runTask("Criar perfil", async () => await upsertProfileSelf(user.id, pending.displayName || "Usuário", null), { showOverlay: true, timeoutMs: 20000 });
 
         let inventoryId = null;
 
         if (pending.mode === "create") {
-          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", {
-            p_name: "Inventário",
-            p_display_name: pending.displayName || "Usuário",
-          });
+          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", { p_display_name: pending.displayName || "Usuário" });
           if (error) throw error;
-          inventoryId = data?.[0]?.inventory_id;
+          inventoryId = data?.inventory_id || data?.[0]?.inventory_id;
         } else {
-          const { data, error } = await supabase.rpc("join_inventory_by_code", {
-            p_code: pending.code,
-            p_display_name: pending.displayName || "Usuário",
-          });
+          const { data, error } = await supabase.rpc("join_inventory_by_code", { p_code: pending.code, p_display_name: pending.displayName || "Usuário" });
           if (error) throw error;
-          inventoryId = data?.[0]?.inventory_id;
+          inventoryId = data?.inventory_id || data?.[0]?.inventory_id;
         }
 
         if (!inventoryId) throw new Error("Não consegui obter o inventário.");
@@ -750,36 +673,77 @@
         clearPendingSetup();
         await bootToInventory(inventoryId);
         return true;
-
       } catch (e) {
+        console.error(e);
         clearPendingSetup();
-        if (isAbortError(e)) {
-          toast("Rede instável. Atualize a página e tente de novo.", "warn", "abort-pending");
-          showLogin();
-          return true;
-        }
         showRegister();
-        toast("Logado ✅ mas falhou ao finalizar inventário: " + (e?.message || e), "warn", "finalize-fail");
+        toast("Falhou ao finalizar inventário: " + (e?.message || e), "warn", "finalize-fail");
         return true;
       }
     }
 
-    async function bootFromProfile(userId) {
-      const { data: prof, error } = await supabase
-        .from("profiles")
-        .select("current_inventory_id")
-        .eq("user_id", userId)
-        .maybeSingle();
+    // ===== Members =====
+    async function refreshMembers() {
+      if (!currentInventoryId) return;
+      $("reloadMembersBtn").classList.remove("hidden");
 
-      if (error) throw error;
+      const data = await runTask("Membros", async () => {
+        const { data, error } = await supabase
+          .from("inventory_members_view")
+          .select("user_id, role, display_name, last_seen_at")
+          .eq("inventory_id", currentInventoryId);
+        if (error) throw error;
+        return data || [];
+      }, { showOverlay: false, timeoutMs: 15000 });
 
-      if (!prof?.current_inventory_id) {
-        showRegister();
-        toast("Você está logado. Agora gere um inventário ou informe um código.", "warn", "need-inv");
+      const list = $("membersList");
+      list.innerHTML = "";
+
+      if (!Array.isArray(data) || !data.length) {
+        const empty = document.createElement("div");
+        empty.className = "sub";
+        empty.textContent = "Sem membros.";
+        list.appendChild(empty);
         return;
       }
 
-      await bootToInventory(prof.current_inventory_id);
+      data.sort((a,b) => {
+        if ((a.role==="owner") !== (b.role==="owner")) return a.role==="owner" ? -1 : 1;
+        return (a.display_name||"").localeCompare((b.display_name||""), "pt-BR");
+      });
+
+      for (const m of data) {
+        const row = document.createElement("div");
+        row.className = "member-row";
+        const isMe = m.user_id === me.user_id;
+
+        const nm = document.createElement("div");
+        nm.innerHTML = `<b>${m.display_name || "Usuário"}</b> ${m.role==="owner" ? "⭐" : ""} ${isMe ? '<span class="pill tiny">(você)</span>' : ""}`;
+
+        const st = document.createElement("div");
+        st.className = "sub";
+        st.textContent = "último acesso: " + relTime(m.last_seen_at);
+
+        row.append(nm, st);
+        list.appendChild(row);
+      }
+    }
+
+    function startMembersLoop() {
+      stopMembersLoop();
+      membersRefreshTimer = setInterval(() => {
+        if (membersOpen && document.visibilityState === "visible") refreshMembers();
+      }, 60000);
+    }
+    function stopMembersLoop() {
+      if (membersRefreshTimer) clearInterval(membersRefreshTimer);
+      membersRefreshTimer = null;
+    }
+
+    function startPresenceLoop() {
+      if (lastSeenTimer) clearInterval(lastSeenTimer);
+      touchLastSeen();
+      lastSeenTimer = setInterval(() => { if (document.visibilityState === "visible") touchLastSeen(); }, 30000);
     }
 
     // ===== UI events =====
@@ -791,11 +755,18 @@
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
 
-      await runTask("Login", async () => {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+      try {
+        await runTask("Login", async () => {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+        }, { showOverlay: true });
+
         toast("Logado ✅", "success", "logged");
-      }, { showOverlay: true, timeoutMs: 20000, retryOnAbort: true });
+      } catch (e) {
+        const msg = (e?.message || "").toLowerCase();
+        if (msg.includes("invalid login credentials")) return toast("Email ou senha inválidos.", "warn", "bad-creds");
+        if (!isAbortError(e)) toast("Falha no login: " + (e?.message || e), "error", "login-fail");
+      }
     };
 
     $("registerBtn").onclick = async () => {
@@ -812,41 +783,54 @@
 
       setPendingSetup({ displayName, mode: gen ? "create" : "join", code: gen ? "" : code, createdAt: Date.now() });
 
-      await runTask("Criar conta", async () => {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: APP_URL },
-        });
-        if (error) { clearPendingSetup(); throw error; }
+      try {
+        await runTask("Criar conta", async () => {
+          const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { emailRedirectTo: APP_URL },
+          });
+          if (error) throw error;
 
-        if (!data?.session?.user) {
+          if (!data?.session?.user) {
+            clearPendingSetup();
+            toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
+            showLogin();
+            $("loginEmail").value = email;
+            return;
+          }
+
+          await finalizePendingSetupIfNeeded(data.session.user);
+        }, { showOverlay: true });
+
+      } catch (e) {
+        const msg = (e?.message || "").toLowerCase();
+        if (msg.includes("already registered") || msg.includes("user already registered")) {
           clearPendingSetup();
-          toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
+          toast("Esse email já tem conta. Faz login 😊", "warn", "already");
           showLogin();
+          $("loginEmail").value = email;
           return;
         }
 
-        await runTask("Preparar inventário", async () => {
-          const ok = await finalizePendingSetupIfNeeded(data.session.user);
-          if (!ok) throw new Error("Não consegui finalizar inventário.");
-        }, { showOverlay: true, timeoutMs: 30000, retryOnAbort: true });
-      }, { showOverlay: true, timeoutMs: 30000, retryOnAbort: true });
+        clearPendingSetup();
+        if (!isAbortError(e)) toast("Falha no cadastro: " + (e?.message || e), "error", "signup-fail");
+      }
     };
 
     $("logoutBtn").onclick = async () => {
-      await runTask("Sair", async () => {
-        await stopItemsRealtime();
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
+      overlaySafe(true, "logout");
+      try {
+        await stopRealtime();
+        if (lastSeenTimer) clearInterval(lastSeenTimer);
+        await supabase.auth.signOut();
         currentInventoryId = null;
         items = [];
-        members = [];
-        cancelEdit();
-        setMembersOpen(false);
         showLogin();
         toast("Saiu.", "warn", "logout");
-      }, { showOverlay: true, timeoutMs: 20000, retryOnAbort: true });
+      } finally {
+        overlaySafe(false, "logout");
+      }
     };
 
     $("invCodeShow").onclick = async () => {
@@ -860,24 +844,36 @@
       }
     };
 
-    $("add").onclick = addOrUpdateFromForm;
-    $("search").addEventListener("input", renderItems);
-    $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addOrUpdateFromForm(); });
+    $("toggleMembersBtn").onclick = async () => {
+      membersOpen = !membersOpen;
+      $("membersWrap").classList.toggle("hidden", !membersOpen);
+      $("reloadMembersBtn").classList.toggle("hidden", !membersOpen);
+      $("toggleMembersBtn").textContent = membersOpen ? "Ocultar" : "Mostrar";
+      if (membersOpen) {
+        await refreshMembers();
+        startMembersLoop();
+      } else stopMembersLoop();
+    };
+    $("reloadMembersBtn").onclick = async () => refreshMembers();
+
+    $("add").onclick = () => addOrUpdateItem();
+    $("cancelEdit").onclick = () => cancelEdit();
+    $("search").addEventListener("input", render);
+    $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addOrUpdateItem(); });
 
     $("filterList").onclick = () => {
       showOnlyNeeds = !showOnlyNeeds;
       $("filterList").classList.toggle("active", showOnlyNeeds);
       $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
-      renderItems();
+      render();
     };
 
     $("export").onclick = () => {
-      const payload = { version: 2, exportedAt: new Date().toISOString(), items };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "inventario-backup.json";
+      a.download = "inventario.json";
       a.click();
       URL.revokeObjectURL(url);
       toast("Exportado ✅", "success", "export");
@@ -887,80 +883,243 @@
       const inp = document.createElement("input");
       inp.type = "file";
       inp.accept = "application/json";
-
       inp.onchange = async () => {
         const file = inp.files?.[0];
         if (!file) return;
-
-        await runTask("Importar", async () => {
+        overlaySafe(true, "import");
+        try {
           const text = await file.text();
-          const parsed = JSON.parse(text);
+          const data = JSON.parse(text);
+          if (!Array.isArray(data)) return toast("Arquivo inválido.", "error", "import-invalid");
+          if (!currentInventoryId) return;
 
-          const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : null);
-          if (!Array.isArray(arr)) throw new Error("Arquivo inválido.");
+          for (const it of data) {
+            const name = (it?.name || "").toString().trim();
+            if (!name) continue;
+            const unit = (it?.unit || "un").toString();
+            const qty = round(Number(it?.qty || 0));
+            const min_qty = round(Number(it?.min_qty || 0));
+            const n = norm(name);
+            const existing = items.find(x => x.name_norm === n && x.unit === unit);
 
-          items = arr.map(normalizeItem).filter(Boolean);
-          cancelEdit();
-          renderItems();
-          await saveNow(items);
+            if (existing) {
+              const patched = await updateItem(existing.id, { name, name_norm: n, unit, qty, min_qty });
+              upsertLocalItem(patched);
+            } else {
+              const inserted = await insertItem({ inventory_id: currentInventoryId, name, name_norm: n, unit, qty, min_qty });
+              upsertLocalItem(inserted);
+            }
+          }
           toast("Importado ✅", "success", "import-ok");
-        }, { showOverlay: true, timeoutMs: 30000, retryOnAbort: true });
+        } catch (e) {
+          console.error(e);
+          toast("Falha ao importar: " + (e?.message || e), "error", "import-fail");
+        } finally {
+          overlaySafe(false, "import");
+        }
       };
-
       inp.click();
     };
 
     $("clear").onclick = async () => {
       if (!confirm("Tem certeza que quer zerar tudo?")) return;
-      await runTask("Zerar", async () => {
-        items = [];
-        cancelEdit();
-        renderItems();
-        await saveNow(items);
-        toast("Zerado ✅", "success", "clear-ok");
-      }, { showOverlay: true, timeoutMs: 25000, retryOnAbort: true });
-    };
-
-    // ===== auth source of truth =====
-    let booting = false;
-
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (booting) return;
-
-      if (!session?.user) {
-        overlay(false);
-        showLogin();
-        return;
-      }
-
-      booting = true;
+      overlaySafe(true, "clear");
       try {
-        const did = await finalizePendingSetupIfNeeded(session.user);
-        if (did) return;
-
-        await runTask("Iniciar", () => bootFromProfile(session.user.id), { showOverlay: true, timeoutMs: 25000, retryOnAbort: true });
+        if (!currentInventoryId) return;
+        for (const id of items.map(x => x.id)) await deleteItem(id);
+        items = [];
+        saveLocal(currentInventoryId, items);
+        render();
+        toast("Zerado ✅", "success", "clear-ok");
       } catch (e) {
         console.error(e);
-        if (isAbortError(e)) {
-          toast("Rede instável (Abort). Atualize a página e tente de novo.", "warn", "abort-boot");
-          showLogin();
-        } else {
-          showRegister();
-          toast("Logado ✅ mas falhou ao sincronizar. Verifique policies/RPC.", "warn", "boot-fail");
-        }
+        toast("Falha ao zerar: " + (e?.message || e), "error", "clear-fail");
       } finally {
-        booting = false;
+        overlaySafe(false, "clear");
+      }
+    };
+
+    // ===== Edit =====
+    function startEdit(id) {
+      const it = items.find(x => x.id === id);
+      if (!it) return;
+      editingId = id;
+      $("name").value = it.name || "";
+      $("unit").value = it.unit || "un";
+      $("qty").value = it.qty ?? 0;
+      $("min").value = it.min_qty ?? 0;
+      $("add").textContent = "Salvar";
+      $("cancelEdit").classList.remove("hidden");
+      toast("Editando item…", "warn", "editing");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    function cancelEdit() {
+      editingId = null;
+      $("name").value = "";
+      $("qty").value = "";
+      $("min").value = "";
+      $("confirmBuy").checked = false;
+      $("add").textContent = "Adicionar";
+      $("cancelEdit").classList.add("hidden");
+    }
+
+    async function addOrUpdateItem() {
+      if (!currentInventoryId) return;
+      const name = $("name").value.trim();
+      const unit = $("unit").value;
+      const qty = round(Number($("qty").value || 0));
+      const minQty = round(Number($("min").value || 0));
+      const confirmBuy = $("confirmBuy").checked;
+      if (!name) return toast("Informe o nome do item.", "warn", "need-name");
+      const n = norm(name);
+
+      try {
+        overlaySafe(true, "save-item");
+        if (editingId) {
+          const old = items.find(x => x.id === editingId);
+          const patch = { name, name_norm: n, unit, qty, min_qty: minQty, updated_at: new Date().toISOString() };
+          if (confirmBuy) {
+            patch.last_buy_at = new Date().toISOString();
+            const oldQty = Number(old?.qty ?? 0);
+            const delta = round(qty - oldQty);
+            patch.last_buy_qty = delta > 0 ? delta : qty;
+          }
+          const updated = await updateItem(editingId, patch);
+          upsertLocalItem(updated);
+          toast("Salvo ✅", "success", "saved-edit");
+          cancelEdit();
+          return;
+        }
+
+        const existing = items.find(x => x.name_norm === n && x.unit === unit);
+        if (existing) {
+          const newQty = round(Number(existing.qty || 0) + qty);
+          const patch = { qty: newQty, min_qty: (minQty || minQty === 0) ? minQty : (existing.min_qty || 0), updated_at: new Date().toISOString() };
+          if (confirmBuy) { patch.last_buy_at = new Date().toISOString(); patch.last_buy_qty = qty; }
+          const updated = await updateItem(existing.id, patch);
+          upsertLocalItem(updated);
+          toast("Atualizado ✅", "success", "saved-merge");
+        } else {
+          const row = { inventory_id: currentInventoryId, name, name_norm: n, unit, qty, min_qty: minQty };
+          if (confirmBuy) { row.last_buy_at = new Date().toISOString(); row.last_buy_qty = qty; }
+          const inserted = await insertItem(row);
+          upsertLocalItem(inserted);
+          toast("Adicionado ✅", "success", "saved-new");
+        }
+
+        $("name").value = ""; $("qty").value = ""; $("min").value = ""; $("confirmBuy").checked = false;
+        render();
+      } catch (e) {
+        console.error(e);
+        toast("Falha ao salvar: " + (e?.message || e), "error", "save-fail");
+      } finally {
+        overlaySafe(false, "save-item");
+      }
+    }
+
+    async function updateQty(id, delta) {
+      const it = items.find(x => x.id === id);
+      if (!it) return;
+      const oldQty = Number(it.qty ?? 0);
+      const newQty = round(Math.max(0, oldQty + Number(delta)));
+
+      try {
+        it.qty = newQty;
+        saveLocal(currentInventoryId, items);
+        render();
+
+        const patch = { qty: newQty, updated_at: new Date().toISOString() };
+        if (newQty === 0 && oldQty > 0) { patch.last_zero_at = new Date().toISOString(); patch.last_zero_qty = 0; }
+        const updated = await runTask("Salvar", () => updateItem(id, patch), { showOverlay: false, timeoutMs: 15000 });
+        if (updated) upsertLocalItem(updated);
+      } catch (e) {
+        console.error(e);
+        toast("Não salvou no cloud. Tentando depois.", "warn", "save-offline");
+        setNet("offline");
+      }
+    }
+
+    async function removeItem(id) {
+      if (!confirm("Remover item?")) return;
+      try {
+        overlaySafe(true, "delete");
+        items = items.filter(x => x.id !== id);
+        saveLocal(currentInventoryId, items);
+        render();
+        await deleteItem(id);
+        toast("Removido ✅", "success", "deleted");
+      } catch (e) {
+        console.error(e);
+        toast("Falha ao remover: " + (e?.message || e), "error", "del-fail");
+      } finally {
+        overlaySafe(false, "delete");
+      }
+    }
+
+    // ===== visibility =====
+    document.addEventListener("visibilitychange", async () => {
+      if (!currentInventoryId) return;
+      if (document.hidden) await stopRealtime();
+      else {
+        setNet(navigator.onLine ? "sync" : "offline");
+        const cloudItems = await runTask("Sincronizar", () => fetchItems(currentInventoryId), { showOverlay: false, timeoutMs: 20000 });
+        if (Array.isArray(cloudItems)) {
+          items = cloudItems.map(x => ({ ...x, name_norm: x.name_norm || norm(x.name) }));
+          saveLocal(currentInventoryId, items);
+          render();
+          setNet("online");
+        }
+        await startRealtime(currentInventoryId);
+        touchLastSeen();
+        if (membersOpen) refreshMembers();
       }
     });
 
-    // first paint
+    window.addEventListener("online", () => setNet("sync"));
+    window.addEventListener("offline", () => setNet("offline"));
+
+    // ===== auth =====
+    let booting = false;
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (booting) return;
+      if (!session?.user) {
+        overlaySafe(false, "authStateChange");
+        await stopRealtime();
+        showLogin();
+        return;
+      }
+      booting = true;
+      try {
+        const did = await finalizePendingSetupIfNeeded(session.user);
+        if (!did) await bootFromProfile(session.user.id);
+      } catch (e) {
+        console.error(e);
+        showLogin();
+        if (!isAbortError(e)) toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
+      } finally {
+        booting = false;
+        overlaySafe(false, "authStateChange");
+      }
+    });
+
+    // ===== first paint =====
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) showLogin();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) { showLogin(); setNet(navigator.onLine ? "sync" : "offline"); return; }
+        setNet(navigator.onLine ? "sync" : "offline");
+        overlaySafe(true, "first-paint");
+        const did = await finalizePendingSetupIfNeeded(session.user);
+        if (!did) await bootFromProfile(session.user.id);
+      } catch (e) {
+        console.error(e);
+        showLogin();
+        if (!isAbortError(e)) toast("Falha ao iniciar: " + (e?.message || e), "error", "init-fail");
+      } finally {
+        overlaySafe(false, "first-paint");
+      }
     })();
 
-    // (membros começa fechado)
-    setMembersOpen(false);
   </script>
 </body>
 </html>
