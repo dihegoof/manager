@@ -2,761 +2,775 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Inventário da Casa</title>
-  <link rel="stylesheet" href="css/style.css">
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Inventário</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
-
 <body>
-  <div id="statusBar" class="status-bar hidden"></div>
-  <div id="toastHost" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <div class="container">
+    <div class="header">
+      <div class="title">Inventário da Casa</div>
+      <div id="topBadge" class="badge">desconectado</div>
+    </div>
 
-  <div id="authView" class="center-screen">
-    <div class="card login-card">
-      <h1 class="title" id="authTitle">Entrar</h1>
+    <!-- AUTH -->
+    <div id="authCard" class="card">
+      <div class="grid">
+        <div>
+          <h2 style="margin:0 0 10px 0">Entrar</h2>
+          <div class="row">
+            <div class="field">
+              <label>Email</label>
+              <input id="loginEmail" class="input" type="email" placeholder="seu@email.com" />
+            </div>
+            <div class="field">
+              <label>Senha</label>
+              <input id="loginPass" class="input" type="password" placeholder="••••••••" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnLogin" class="btn">Entrar</button>
+          </div>
+          <div class="small" style="margin-top:8px">
+            Dica: no GitHub Pages use sempre HTTPS e confira se o URL do site está em “Auth → URL Configuration”.
+          </div>
+        </div>
 
-      <div id="loginForm">
-        <div class="row">
-          <input id="loginEmail" placeholder="Email" autocomplete="username" />
+        <div>
+          <h2 style="margin:0 0 10px 0">Registrar</h2>
+          <div class="row">
+            <div class="field">
+              <label>Nome</label>
+              <input id="regName" class="input" type="text" placeholder="Dihego" />
+            </div>
+            <div class="field">
+              <label>Email</label>
+              <input id="regEmail" class="input" type="email" placeholder="seu@email.com" />
+            </div>
+            <div class="field">
+              <label>Senha</label>
+              <input id="regPass" class="input" type="password" placeholder="••••••••" />
+            </div>
+          </div>
+
+          <div class="row" style="align-items:center; margin-top:10px">
+            <label style="margin:0; display:flex; gap:10px; align-items:center">
+              <input id="regCreateInv" type="checkbox" checked />
+              <span>Gerar inventário</span>
+            </label>
+            <div class="field" style="flex:1 1 240px; min-width:220px">
+              <input id="regInvite" class="input" type="text" placeholder="Código do inventário (6 letras/números)" maxlength="6" />
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <button id="btnRegister" class="btn">Criar conta</button>
+          </div>
+
+          <div class="small" style="margin-top:8px">
+            Se “Gerar inventário” estiver marcado, o código acima é ignorado.
+          </div>
         </div>
-        <div class="row mt10">
-          <input id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" />
-        </div>
-        <div class="row mt12">
-          <button id="loginBtn">Logar</button>
-          <button id="openRegisterBtn" class="small" type="button">Registrar</button>
+      </div>
+    </div>
+
+    <!-- APP -->
+    <div id="app" style="display:none">
+      <div class="card">
+        <div class="row" style="align-items:center; justify-content:space-between">
+          <div>
+            <div style="font-weight:900" id="hello">Olá</div>
+            <div class="small" id="invInfo">Inventário: -</div>
+          </div>
+          <div class="row">
+            <button id="btnLogout" class="btn btn-ghost">Sair</button>
+          </div>
         </div>
       </div>
 
-      <div id="registerForm" class="hidden">
-        <div class="row">
-          <input id="regName" placeholder="Seu nome" autocomplete="name" />
-        </div>
-        <div class="row mt10">
-          <input id="regEmail" placeholder="Email" autocomplete="username" />
-        </div>
-        <div class="row mt10">
-          <input id="regPass" type="password" placeholder="Senha" autocomplete="new-password" />
-        </div>
-
-        <div class="row mt10" style="align-items:center;">
-          <label class="checkline">
-            <input id="genInv" type="checkbox" checked />
-            Gerar inventário
-          </label>
+      <div class="grid">
+        <!-- MEMBERS (visualização simples) -->
+        <div class="card">
+          <h3 style="margin:0 0 10px 0">Membros</h3>
+          <div class="small" style="margin-bottom:10px">
+            (Somente visualização por enquanto)
+          </div>
+          <div id="membersList" class="list"></div>
         </div>
 
-        <div class="row mt10">
-          <input id="invCode" placeholder="Código do inventário (6 letras/números)" autocomplete="off" disabled />
-        </div>
+        <!-- ADD/EDIT -->
+        <div class="card">
+          <h3 style="margin:0 0 10px 0" id="formTitle">Adicionar item</h3>
+          <div class="row">
+            <div class="field" style="flex:1 1 260px">
+              <label>Nome</label>
+              <input id="itemName" class="input" type="text" placeholder="Arroz" />
+            </div>
+            <div class="field">
+              <label>Qtd</label>
+              <input id="itemQty" class="input" type="number" step="0.01" placeholder="1" />
+            </div>
+            <div class="field">
+              <label>Unidade</label>
+              <input id="itemUnit" class="input" type="text" placeholder="kg / un / pct" value="un" />
+            </div>
+          </div>
 
-        <div class="row mt12">
-          <button id="registerBtn">Criar conta</button>
-          <button id="backToLoginBtn" class="small" type="button">Voltar</button>
+          <div class="row" style="margin-top:10px">
+            <div class="field">
+              <label>Qtd mínima</label>
+              <input id="itemMin" class="input" type="number" step="0.01" placeholder="0" />
+            </div>
+            <div class="field" style="display:flex; align-items:flex-end">
+              <label style="margin:0; display:flex; gap:10px; align-items:center">
+                <input id="itemEssential" type="checkbox" checked />
+                <span>Essencial</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <button id="btnSaveItem" class="btn">Salvar</button>
+            <button id="btnCancelEdit" class="btn btn-ghost" style="display:none">Cancelar</button>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="row" style="align-items:center; justify-content:space-between">
+            <div>
+              <div style="font-weight:900">Lista de compras</div>
+              <div class="small">Mostra itens abaixo do mínimo.</div>
+            </div>
+            <div class="row">
+              <select id="filterEssential" class="input" style="width:auto">
+                <option value="all">Essenciais + Não essenciais</option>
+                <option value="essential">Só essenciais</option>
+                <option value="non">Só não essenciais</option>
+              </select>
+              <button id="btnCopyList" class="btn btn-ghost">Copiar</button>
+            </div>
+          </div>
+          <div class="small" id="buyList" style="margin-top:10px; white-space:pre-wrap"></div>
         </div>
       </div>
 
-      <div class="muted" style="margin-top:10px">
-        Dica: se “Gerar inventário” estiver desligado, informe um código de 6 caracteres.
+      <!-- ITEMS -->
+      <div class="card">
+        <div class="row" style="align-items:center; justify-content:space-between">
+          <h3 style="margin:0">Itens</h3>
+          <div class="pill" id="itemsCount">0</div>
+        </div>
+        <div class="small" style="margin-top:6px">
+          Realtime ligado: qualquer alteração aparece pros dois (você e sua esposa) sem recarregar.
+        </div>
+
+        <div style="margin-top:12px" id="itemsList" class="list"></div>
       </div>
     </div>
   </div>
 
-  <div id="appView" class="wrap hidden">
-    <div class="card">
-      <div class="row header-row">
-        <h1 class="title">Inventário da Casa</h1>
-        <button id="logoutBtn" class="small">Sair</button>
+  <!-- MODAL INFO -->
+  <div id="modalBackdrop" class="modal-backdrop">
+    <div class="modal">
+      <div class="row" style="align-items:center; justify-content:space-between">
+        <h3 id="modalTitle">Info</h3>
+        <button id="btnCloseModal" class="btn btn-ghost">Fechar</button>
       </div>
-
-      <div class="muted" style="margin-top:6px;">
-        Código do inventário:
-        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
-      </div>
-
-      <div class="divider"></div>
-      <div id="membersBox">
-        <div class="row header-row" style="gap:8px;">
-          <div style="font-weight:900;">Membros</div>
-          <div class="muted" style="margin:0;">(tempo real)</div>
-        </div>
-        <div id="membersList" class="members-list"></div>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="row">
-        <input id="search" placeholder="Buscar item" />
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="row">
-        <input id="name" placeholder="Novo item:" />
-        <select id="unit">
-          <option value="un">un</option>
-          <option value="g">g</option>
-          <option value="kg">kg</option>
-          <option value="ml">ml</option>
-          <option value="l">l</option>
-        </select>
-        <input id="qty" type="number" step="0.1" placeholder="Qtd" class="w120" />
-        <input id="min" type="number" step="0.1" placeholder="Mín" class="w120" />
-
-        <label class="checkline" style="align-items:center;">
-          <input id="essential" type="checkbox" checked />
-          Essencial
-        </label>
-
-        <button id="add">Salvar</button>
-      </div>
-
-      <div class="muted" id="editHint" style="display:none;">
-        Editando item… ajuste os campos e toque em “Salvar”.
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="row actions">
-        <button class="small" id="filterList">Filtrar lista</button>
-        <button class="small" id="export">Exportar (texto)</button>
-        <button class="small" id="import">Importar (json)</button>
-      </div>
-
-      <div class="list" id="list"></div>
+      <div id="modalBody" class="small" style="white-space:pre-wrap"></div>
     </div>
   </div>
 
-  <footer id="footer" class="footer"></footer>
+  <div id="toast" class="toast">ok</div>
 
-  <script type="module">
-    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    const SUPABASE_URL = "https://xzcgwnifypiqqushxrcs.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_9Nx27f1V0IgMkMw6BdTwmQ_B96lf3wq";
-    const APP_URL = "https://dihegoof.github.io/manager/";
+  <script>
+    // =========================
+    // CONFIG (preencha com o seu)
+    // =========================
+    const SUPABASE_URL = "COLE_AQUI_SUA_URL";
+    const SUPABASE_ANON_KEY = "COLE_AQUI_SUA_ANON_KEY";
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: "invapp_session_v1"
+      }
     });
 
+    // =========================
+    // UI helpers
+    // =========================
     const $ = (id) => document.getElementById(id);
-    const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-    const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
-
-    $("footer").innerHTML = `© ${new Date().getFullYear()}
-      <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
-      — Todos os direitos reservados`;
-
-    let statusTimer = null;
-    function status(msg, kind = "warn", ms = 1400) {
-      const el = $("statusBar");
-      el.textContent = msg;
-      el.className = "status-bar " + kind;
-      el.classList.remove("hidden");
-      clearTimeout(statusTimer);
-      if (ms) statusTimer = setTimeout(() => el.classList.add("hidden"), ms);
+    const toastEl = $("toast");
+    function toast(msg){
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      setTimeout(()=>toastEl.classList.remove("show"), 2200);
     }
 
-    const lastToastAt = new Map();
-    function toast(message, type = "warn", key = "") {
-      const msg = (message || "").toString().trim();
-      if (!msg) return;
-      const k = key || (type + ":" + msg);
-      const now = Date.now();
-      const last = lastToastAt.get(k) || 0;
-      if (now - last < 1200) return;
-      lastToastAt.set(k, now);
-
-      const host = $("toastHost");
-      const wrap = document.createElement("div");
-      wrap.className = `toast ${type}`;
-
-      const bubble = document.createElement("div");
-      bubble.className = "toast-bubble";
-      bubble.textContent = msg;
-
-      wrap.appendChild(bubble);
-      host.appendChild(wrap);
-
-      requestAnimationFrame(() => wrap.classList.add("show"));
-      setTimeout(() => wrap.classList.add("hide"), 3200);
-      setTimeout(() => wrap.remove(), 3800);
+    function fmtDate(d){
+      if(!d) return "-";
+      try{
+        const dt = new Date(d);
+        return dt.toLocaleString("pt-BR");
+      }catch(e){ return String(d); }
     }
 
-    function showLogin() {
-      $("authTitle").textContent = "Entrar";
-      $("loginForm").classList.remove("hidden");
-      $("registerForm").classList.add("hidden");
-      $("authView").classList.remove("hidden");
-      $("appView").classList.add("hidden");
-    }
-    function showRegister() {
-      $("authTitle").textContent = "Registrar";
-      $("loginForm").classList.add("hidden");
-      $("registerForm").classList.remove("hidden");
-      $("authView").classList.remove("hidden");
-      $("appView").classList.add("hidden");
-      syncRegisterUI();
-    }
-    function showApp() {
-      $("authView").classList.add("hidden");
-      $("appView").classList.remove("hidden");
-    }
-    function syncRegisterUI() {
-      const gen = $("genInv").checked;
-      $("invCode").disabled = gen;
-      if (gen) $("invCode").value = "";
+    function daysBetween(a, b){
+      if(!a || !b) return null;
+      const da = new Date(a).getTime();
+      const db = new Date(b).getTime();
+      if(!isFinite(da) || !isFinite(db)) return null;
+      const diff = Math.abs(db - da);
+      return Math.round(diff / (1000*60*60*24));
     }
 
-    async function getSessionUser() {
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.user || null;
-    }
+    // =========================
+    // App state
+    // =========================
+    let session = null;
+    let profile = null;
+    let inventoryId = null;
 
-    let currentInventoryId = null;
-    let inviteCode = "";
     let items = [];
     let members = [];
+    let editItemId = null;
+
     let itemsChannel = null;
     let membersChannel = null;
-    let showOnlyNeeds = false;
-    let editingId = null;
 
-    function needsBuy(it) {
-      const qty = Number(it.qty ?? 0);
-      const min = Number(it.min_qty ?? 0);
-      return qty <= 0 || (min > 0 && qty <= min);
+    function setTopBadge(text){
+      $("topBadge").textContent = text;
     }
 
-    function fmtSeen(ts) {
-      if (!ts) return "—";
-      const d = new Date(ts);
-      const now = new Date();
-      const diff = Math.floor((now - d) / 1000);
-      if (diff < 60) return "agora";
-      const min = Math.floor(diff/60);
-      if (min < 60) return `há ${min} min`;
-      const h = Math.floor(min/60);
-      if (h < 24) return `há ${h} h`;
-      const days = Math.floor(h/24);
-      return `há ${days} d`;
+    function showAuth(){
+      $("authCard").style.display = "block";
+      $("app").style.display = "none";
     }
 
-    function renderMembers() {
-      const box = $("membersList");
-      box.innerHTML = "";
-      if (!members.length) {
-        const e = document.createElement("div");
-        e.className = "sub";
-        e.textContent = "Nenhum membro carregado.";
-        box.appendChild(e);
-        return;
-      }
-      const sorted = [...members].sort((a,b) => (a.role === "owner" ? -1 : 1) - (b.role === "owner" ? -1 : 1) || (a.display_name||"").localeCompare(b.display_name||""));
-      for (const m of sorted) {
-        const row = document.createElement("div");
-        row.className = "member";
-        const star = m.role === "owner" ? " ⭐" : "";
-        row.innerHTML = `<div style="font-weight:900">${m.display_name || "Usuário"}${star}</div>
-                         <div class="sub">visto: ${fmtSeen(m.last_seen_at)}</div>`;
-        box.appendChild(row);
-      }
+    function showApp(){
+      $("authCard").style.display = "none";
+      $("app").style.display = "block";
     }
 
-    function renderItems() {
-      const q = norm($("search").value);
-      const list = $("list");
-      list.innerHTML = "";
+    // =========================
+    // Core: boot + session
+    // =========================
+    async function boot(){
+      // nunca deixa “loading infinito”: a UI sempre mostra auth ou app
+      const { data } = await supabase.auth.getSession();
+      session = data.session || null;
 
-      const filtered = items
-        .filter(it => {
-          const matchesSearch = !q || (it.name_norm || "").includes(q);
-          const matchesNeeds = !showOnlyNeeds || needsBuy(it);
-          return matchesSearch && matchesNeeds;
-        })
-        .sort((a,b) => (a.name||"").localeCompare((b.name||""), "pt-BR"));
-
-      if (!filtered.length) {
-        const empty = document.createElement("div");
-        empty.className = "sub";
-        empty.textContent = showOnlyNeeds ? "Nenhum item precisa comprar 🙂" : "Nada por aqui 🙂";
-        list.appendChild(empty);
+      if(!session){
+        setTopBadge("desconectado");
+        showAuth();
         return;
       }
 
-      for (const it of filtered) {
-        const row = document.createElement("div");
-        row.className = "item";
+      setTopBadge("conectado");
+      await afterLogin();
+    }
 
-        const left = document.createElement("div");
-        const needs = needsBuy(it);
+    supabase.auth.onAuthStateChange(async (event, newSession) => {
+      session = newSession || null;
 
-        const lastBuy = it.last_buy_at ? new Date(it.last_buy_at).toLocaleDateString("pt-BR") : "—";
-        const lastZero = it.last_zero_at ? new Date(it.last_zero_at).toLocaleDateString("pt-BR") : "—";
-        let dur = "";
-        if (it.last_buy_at && it.last_zero_at) {
-          const d1 = new Date(it.last_buy_at);
-          const d2 = new Date(it.last_zero_at);
-          const days = Math.round((d2 - d1) / (1000*60*60*24));
-          if (Number.isFinite(days)) dur = ` • durou ~${days}d`;
+      if(!session){
+        cleanupRealtime();
+        setTopBadge("desconectado");
+        showAuth();
+        return;
+      }
+
+      setTopBadge("conectado");
+      await afterLogin();
+    });
+
+    // Evita bug de “trocar aba e morrer”
+    document.addEventListener("visibilitychange", async () => {
+      if(document.visibilityState === "visible"){
+        // ao voltar pra aba: revalida sessão e re-sincroniza (sem loading)
+        const { data } = await supabase.auth.getSession();
+        if(!data.session){
+          cleanupRealtime();
+          setTopBadge("desconectado");
+          showAuth();
+          toast("Sessão expirou. Entre novamente.");
+          return;
         }
-
-        left.innerHTML = `
-          <div class="name">${it.name}</div>
-          <div class="sub">
-            ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
-            ${it.essential ? " • essencial" : " • não essencial"}
-            ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
-          </div>
-          <div class="sub">
-            última compra: ${lastBuy} • último zerado: ${lastZero}${dur}
-          </div>
-        `;
-
-        const controls = document.createElement("div");
-        controls.className = "controls";
-
-        const minus = document.createElement("button");
-        minus.textContent = "−";
-        minus.onclick = () => updateQty(it.id, it.unit === "un" ? -1 : -0.1);
-
-        const edit = document.createElement("button");
-        edit.textContent = "⚙️";
-        edit.title = "Editar";
-        edit.onclick = () => beginEdit(it);
-
-        const qty = document.createElement("div");
-        qty.className = "qty pill";
-        qty.textContent = `${it.qty} ${it.unit}`;
-
-        const plus = document.createElement("button");
-        plus.textContent = "+";
-        plus.onclick = () => updateQty(it.id, it.unit === "un" ? +1 : +0.1);
-
-        controls.append(minus, edit, qty, plus);
-        row.append(left, controls);
-        list.appendChild(row);
+        session = data.session;
+        setTopBadge("conectado");
+        // re-sync leve (se já estava logado)
+        if($("app").style.display === "block"){
+          await syncAll(true);
+        }
       }
+    });
+
+    function cleanupRealtime(){
+      try{
+        if(itemsChannel) supabase.removeChannel(itemsChannel);
+        if(membersChannel) supabase.removeChannel(membersChannel);
+      }catch(e){}
+      itemsChannel = null;
+      membersChannel = null;
+      items = [];
+      members = [];
+      inventoryId = null;
+      profile = null;
+      editItemId = null;
     }
 
-    function beginEdit(it) {
-      editingId = it.id;
-      $("name").value = it.name;
-      $("unit").value = it.unit;
-      $("qty").value = it.qty;
-      $("min").value = it.min_qty || 0;
-      $("essential").checked = !!it.essential;
-      $("editHint").style.display = "block";
-      toast("Editando: ajuste e toque em Salvar", "warn", "edit");
+    // =========================
+    // Login/Register
+    // =========================
+    $("btnLogin").addEventListener("click", async () => {
+      const email = $("loginEmail").value.trim();
+      const password = $("loginPass").value.trim();
+      if(!email || !password) return toast("Preencha email e senha.");
+
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if(error) return toast("Erro: " + error.message);
+
+      toast("Logado!");
+    });
+
+    $("btnRegister").addEventListener("click", async () => {
+      const displayName = $("regName").value.trim();
+      const email = $("regEmail").value.trim();
+      const password = $("regPass").value.trim();
+      const createInv = $("regCreateInv").checked;
+      const invite = $("regInvite").value.trim();
+
+      if(!displayName || !email || !password) return toast("Preencha nome, email e senha.");
+
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if(error) return toast("Erro: " + error.message);
+
+      // muitos projetos exigem email confirmation; se tiver, session pode vir null
+      // então tentamos login automático:
+      let s = data.session;
+      if(!s){
+        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
+        if(loginErr) return toast("Conta criada. Agora entre manualmente.");
+        s = loginData.session;
+      }
+      session = s;
+
+      // Finaliza inventário via RPC (assinaturas SEM conflito)
+      if(createInv){
+        const { error: rpcErr } = await supabase.rpc("create_inventory_and_set_profile", { p_display_name: displayName });
+        if(rpcErr) return toast("Falhou ao finalizar inventário: " + rpcErr.message);
+      }else{
+        if(invite.length !== 6) return toast("Código do inventário deve ter 6 caracteres.");
+        const { error: rpcErr } = await supabase.rpc("join_inventory_and_set_profile", { p_display_name: displayName, p_invite_code: invite });
+        if(rpcErr) return toast("Falhou ao vincular: " + rpcErr.message);
+      }
+
+      toast("Conta pronta!");
+      await afterLogin();
+    });
+
+    $("btnLogout").addEventListener("click", async () => {
+      await supabase.auth.signOut();
+      toast("Saiu.");
+    });
+
+    // =========================
+    // After login: load profile + inventory + realtime
+    // =========================
+    async function afterLogin(){
+      showApp();
+
+      // carrega profile
+      const uid = session.user.id;
+      const { data: prof, error: profErr } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, current_inventory_id, last_seen_at")
+        .eq("user_id", uid)
+        .maybeSingle();
+
+      if(profErr) {
+        // Se profile não existe (caso raro): força usuário registrar de novo pelo fluxo correto
+        toast("Profile não encontrado. Faça logout e registre novamente.");
+        console.error(profErr);
+        return;
+      }
+
+      profile = prof;
+      inventoryId = profile?.current_inventory_id || null;
+
+      $("hello").textContent = "Olá, " + (profile.display_name || "usuário");
+      $("invInfo").textContent = inventoryId ? ("Inventário: " + inventoryId) : "Inventário: -";
+
+      if(!inventoryId){
+        toast("Sem inventário vinculado. Faça logout e registre novamente.");
+        return;
+      }
+
+      // marca "last seen" (sem spam)
+      await supabase.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("user_id", uid);
+
+      await syncAll(false);
+      setupRealtime();
     }
 
-    function clearEdit() {
-      editingId = null;
-      $("name").value = "";
-      $("qty").value = "";
-      $("min").value = "";
-      $("essential").checked = true;
-      $("editHint").style.display = "none";
+    async function syncAll(soft){
+      // soft = não mexe em UI, só sincroniza em silêncio
+      await Promise.all([loadItems(), loadMembers()]);
+      renderAll();
+      if(!soft) toast("Sincronizado.");
     }
 
-    async function loadInventoryMeta(invId) {
-      const { data, error } = await supabase
-        .from("inventories")
-        .select("id, invite_code")
-        .eq("id", invId)
-        .single();
-      if (error) throw error;
-      inviteCode = data?.invite_code || "";
-      $("invCodeShow").textContent = inviteCode || "(sem código)";
-    }
+    // =========================
+    // Realtime (itens + membros)
+    // =========================
+    function setupRealtime(){
+      cleanupRealtimeChannelsOnly();
 
-    async function loadItems(invId) {
-      const { data, error } = await supabase
-        .from("inventory_items")
-        .select("*")
-        .eq("inventory_id", invId);
-      if (error) throw error;
-      items = Array.isArray(data) ? data : [];
-      renderItems();
-    }
-
-    async function loadMembers(invId) {
-      const { data, error } = await supabase
-        .from("inventory_members")
-        .select("user_id, role, display_name, last_seen_at")
-        .eq("inventory_id", invId);
-      if (error) throw error;
-      members = Array.isArray(data) ? data : [];
-      renderMembers();
-    }
-
-    async function subscribeRealtime(invId) {
-      if (itemsChannel) await supabase.removeChannel(itemsChannel);
-      itemsChannel = supabase.channel("items-" + invId)
-        .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items", filter: `inventory_id=eq.${invId}` }, (payload) => {
-          const n = payload.new;
-          const o = payload.old;
-          if (payload.eventType === "INSERT") items.push(n);
-          else if (payload.eventType === "UPDATE") {
-            const idx = items.findIndex(x => x.id === n.id);
-            if (idx >= 0) items[idx] = n;
-          } else if (payload.eventType === "DELETE") items = items.filter(x => x.id !== o.id);
+      // Itens: qualquer INSERT/UPDATE/DELETE no inventory_id => refetch (simples e confiável)
+      itemsChannel = supabase.channel("rt-items-" + inventoryId)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "inventory_items",
+          filter: "inventory_id=eq." + inventoryId
+        }, async () => {
+          await loadItems();
           renderItems();
+          renderBuyList();
         })
         .subscribe();
 
-      if (membersChannel) await supabase.removeChannel(membersChannel);
-      membersChannel = supabase.channel("members-" + invId)
-        .on("postgres_changes", { event: "*", schema: "public", table: "inventory_members", filter: `inventory_id=eq.${invId}` }, (payload) => {
-          const n = payload.new;
-          const o = payload.old;
-          if (payload.eventType === "INSERT") members.push(n);
-          else if (payload.eventType === "UPDATE") {
-            const idx = members.findIndex(x => x.user_id === n.user_id);
-            if (idx >= 0) members[idx] = n;
-          } else if (payload.eventType === "DELETE") members = members.filter(x => x.user_id !== o.user_id);
+      // Membros: refresh
+      membersChannel = supabase.channel("rt-members-" + inventoryId)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "inventory_members",
+          filter: "inventory_id=eq." + inventoryId
+        }, async () => {
+          await loadMembers();
           renderMembers();
         })
         .subscribe();
     }
 
-    async function boot(invId) {
-      currentInventoryId = invId;
-      showApp();
-      status("Sincronizando…", "warn", 1200);
-      await Promise.all([
-        loadInventoryMeta(invId),
-        loadItems(invId),
-        loadMembers(invId),
-        subscribeRealtime(invId),
-      ]);
-      supabase.rpc("touch_presence").catch(() => {});
-      toast("Online ✅", "success", "online");
+    function cleanupRealtimeChannelsOnly(){
+      try{ if(itemsChannel) supabase.removeChannel(itemsChannel); }catch(e){}
+      try{ if(membersChannel) supabase.removeChannel(membersChannel); }catch(e){}
+      itemsChannel = null;
+      membersChannel = null;
     }
 
-    $("openRegisterBtn").onclick = () => showRegister();
-    $("backToLoginBtn").onclick = () => showLogin();
-    $("genInv").addEventListener("change", syncRegisterUI);
+    // =========================
+    // Data fetch
+    // =========================
+    async function loadItems(){
+      const { data, error } = await supabase
+        .from("inventory_items")
+        .select("*")
+        .eq("inventory_id", inventoryId)
+        .order("updated_at", { ascending: false });
 
-    $("loginBtn").onclick = async () => {
-      const email = $("loginEmail").value.trim();
-      const password = $("loginPass").value;
-      if (!email || !password) return toast("Informe email e senha.", "warn", "login-missing");
+      if(error){
+        console.error(error);
+        toast("Erro ao carregar itens: " + error.message);
+        return;
+      }
+      items = data || [];
+    }
 
-      status("Entrando…", "warn", 1500);
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return toast(error.message, "error", "login-error");
-    };
+    async function loadMembers(){
+      const { data, error } = await supabase
+        .from("inventory_members")
+        .select("user_id, role, display_name, last_seen_at, created_at")
+        .eq("inventory_id", inventoryId)
+        .order("role", { ascending: true });
 
-    $("registerBtn").onclick = async () => {
-      const displayName = $("regName").value.trim();
-      const email = $("regEmail").value.trim();
-      const password = $("regPass").value;
-      const gen = $("genInv").checked;
-      const code = ($("invCode").value || "").trim().toUpperCase().replace(/\s+/g, "");
+      if(error){
+        console.error(error);
+        toast("Erro ao carregar membros: " + error.message);
+        return;
+      }
+      members = data || [];
+    }
 
-      if (!displayName) return toast("Informe seu nome.", "warn", "reg-name");
-      if (!email) return toast("Informe seu email.", "warn", "reg-email");
-      if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warn", "reg-pass");
-      if (!gen && (!code || code.length !== 6)) return toast("Informe um código válido (6 caracteres).", "warn", "reg-code");
+    // =========================
+    // Render
+    // =========================
+    function renderAll(){
+      renderItems();
+      renderMembers();
+      renderBuyList();
+    }
 
-      status("Criando conta…", "warn", 1500);
+    function renderMembers(){
+      const box = $("membersList");
+      box.innerHTML = "";
+      if(!members.length){
+        box.innerHTML = `<div class="small">Nenhum membro encontrado.</div>`;
+        return;
+      }
+      for(const m of members){
+        const isOwner = m.role === "owner";
+        const last = m.last_seen_at ? fmtDate(m.last_seen_at) : "nunca";
+        const el = document.createElement("div");
+        el.className = "item";
+        el.innerHTML = `
+          <div class="item-left">
+            <div class="item-name">${escapeHtml(m.display_name)} ${isOwner ? "⭐" : ""}</div>
+            <div class="item-meta">Cargo: ${isOwner ? "dono" : "membro"} • Visto: ${escapeHtml(last)}</div>
+          </div>
+        `;
+        box.appendChild(el);
+      }
+    }
 
-      const { data, error } = await supabase.auth.signUp({
-        email, password,
-        options: { emailRedirectTo: APP_URL }
-      });
-
-      if (error) return toast(error.message, "error", "signup-error");
-
-      if (!data?.session?.user) {
-        toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
-        showLogin();
+    function renderItems(){
+      $("itemsCount").textContent = String(items.length);
+      const box = $("itemsList");
+      box.innerHTML = "";
+      if(!items.length){
+        box.innerHTML = `<div class="small">Sem itens ainda.</div>`;
         return;
       }
 
-      try {
-        let invId = null;
-        if (gen) {
-          const { data: r, error: e } = await supabase.rpc("create_inventory_and_set_profile", {
-            p_display_name: displayName
-          });
-          if (e) throw e;
-          invId = r?.[0]?.inventory_id;
-        } else {
-          const { data: r, error: e } = await supabase.rpc("join_inventory_by_code", {
-            p_code: code,
-            p_display_name: displayName
-          });
-          if (e) throw e;
-          invId = r?.[0]?.inventory_id;
-        }
+      for(const it of items){
+        const belowMin = Number(it.qty) < Number(it.min_qty);
+        const meta = `${it.qty} ${escapeHtml(it.unit)} • mín ${it.min_qty} • ${it.essential ? "essencial" : "não essencial"}${belowMin ? " • ⚠ abaixo do mínimo" : ""}`;
 
-        if (!invId) throw new Error("Não consegui obter o inventário.");
-        await boot(invId);
-      } catch (e) {
-        console.error(e);
-        toast("Falhou ao finalizar inventário: " + (e?.message || e), "error", "finalize");
-        showLogin();
-      }
-    };
-
-    $("logoutBtn").onclick = async () => {
-      status("Saindo…", "warn", 1200);
-      if (itemsChannel) await supabase.removeChannel(itemsChannel);
-      if (membersChannel) await supabase.removeChannel(membersChannel);
-      itemsChannel = null; membersChannel = null;
-      currentInventoryId = null;
-      items = []; members = [];
-      clearEdit();
-      await supabase.auth.signOut();
-      showLogin();
-    };
-
-    $("invCodeShow").onclick = async () => {
-      const t = $("invCodeShow").textContent || "";
-      if (!t) return;
-      try { await navigator.clipboard.writeText(t); toast("Código copiado ✅", "success", "copy"); }
-      catch { toast("Não consegui copiar.", "error", "copy-fail"); }
-    };
-
-    async function upsertItem() {
-      if (!currentInventoryId) return;
-
-      const name = $("name").value.trim();
-      const unit = $("unit").value;
-      const qty = Number($("qty").value || 0);
-      const minQty = Number($("min").value || 0);
-      const essential = !!$("essential").checked;
-      if (!name) return toast("Informe o nome do item.", "warn", "no-name");
-
-      const name_norm = norm(name);
-      status("Salvando…", "warn", 900);
-
-      if (editingId) {
-        const { error } = await supabase
-          .from("inventory_items")
-          .update({ name, name_norm, unit, qty: round(qty), min_qty: round(minQty), essential })
-          .eq("id", editingId)
-          .eq("inventory_id", currentInventoryId);
-        if (error) return toast(error.message, "error", "upd");
-        toast("Atualizado ✅", "success", "upd-ok");
-        clearEdit();
-        return;
-      }
-
-      const { data: existing } = await supabase
-        .from("inventory_items")
-        .select("id, qty")
-        .eq("inventory_id", currentInventoryId)
-        .eq("name_norm", name_norm)
-        .eq("unit", unit)
-        .maybeSingle();
-
-      if (existing?.id) {
-        const { error } = await supabase
-          .from("inventory_items")
-          .update({
-            name,
-            qty: round(Number(existing.qty || 0) + qty),
-            min_qty: round(minQty),
-            essential
-          })
-          .eq("id", existing.id);
-        if (error) return toast(error.message, "error", "upsert2");
-        toast("Somado ✅", "success", "upsert2-ok");
-      } else {
-        const { error } = await supabase
-          .from("inventory_items")
-          .insert({
-            inventory_id: currentInventoryId,
-            name,
-            name_norm,
-            unit,
-            qty: round(qty),
-            min_qty: round(minQty),
-            essential
-          });
-        if (error) return toast(error.message, "error", "ins");
-        toast("Adicionado ✅", "success", "ins-ok");
-      }
-
-      $("name").value = ""; $("qty").value = ""; $("min").value = "";
-      $("essential").checked = true;
-    }
-
-    async function updateQty(id, delta) {
-      const it = items.find(x => x.id === id);
-      if (!it) return;
-      const next = round(Math.max(0, Number(it.qty) + Number(delta)));
-      it.qty = next;
-      renderItems();
-
-      const { error } = await supabase
-        .from("inventory_items")
-        .update({ qty: next })
-        .eq("id", id)
-        .eq("inventory_id", currentInventoryId);
-
-      if (error) {
-        toast("Não salvou: " + error.message, "error", "qtyerr");
-        loadItems(currentInventoryId).catch(()=>{});
+        const el = document.createElement("div");
+        el.className = "item";
+        el.innerHTML = `
+          <div class="item-left">
+            <div class="item-name">${escapeHtml(it.name)}</div>
+            <div class="item-meta">${escapeHtml(meta)}</div>
+          </div>
+          <div class="item-actions">
+            <button class="icon-btn" title="Diminuir" data-act="minus" data-id="${it.id}">−</button>
+            <button class="icon-btn" title="Editar" data-act="edit" data-id="${it.id}">⚙️</button>
+            <button class="icon-btn" title="Info" data-act="info" data-id="${it.id}">ℹ️</button>
+          </div>
+        `;
+        box.appendChild(el);
       }
     }
 
-    $("add").onclick = upsertItem;
-    $("search").addEventListener("input", renderItems);
+    function renderBuyList(){
+      const mode = $("filterEssential").value;
+      const need = items.filter(it => Number(it.qty) < Number(it.min_qty))
+        .filter(it => mode === "all" ? true : (mode === "essential" ? !!it.essential : !it.essential))
+        .map(it => `- ${it.name} (${it.min_qty - it.qty} ${it.unit})`);
 
-    $("filterList").onclick = () => {
-      showOnlyNeeds = !showOnlyNeeds;
-      $("filterList").classList.toggle("active", showOnlyNeeds);
-      $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
-      renderItems();
-    };
+      $("buyList").textContent = need.length ? need.join("\n") : "Nada pra comprar 🎉";
+    }
 
-    $("export").onclick = async () => {
-      const text = items
-        .sort((a,b)=> (a.name||"").localeCompare((b.name||""), "pt-BR"))
-        .map(it => `${it.qty} ${it.unit} - ${it.name} (mín ${it.min_qty||0})${it.essential ? "" : " [não essencial]"}`)
-        .join("\n");
+    $("filterEssential").addEventListener("change", renderBuyList);
 
-      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "inventario.txt";
-      a.click();
-      URL.revokeObjectURL(url);
-      toast("Exportado ✅", "success", "export");
-    };
+    $("btnCopyList").addEventListener("click", async () => {
+      const text = $("buyList").textContent || "";
+      try{
+        await navigator.clipboard.writeText(text);
+        toast("Lista copiada!");
+      }catch(e){
+        toast("Não deu pra copiar (permissão do navegador).");
+      }
+    });
 
-    $("import").onclick = async () => {
-      const inp = document.createElement("input");
-      inp.type = "file";
-      inp.accept = "application/json";
+    // =========================
+    // Add/Edit item
+    // =========================
+    $("btnSaveItem").addEventListener("click", async () => {
+      const name = $("itemName").value.trim();
+      const qty = Number($("itemQty").value || 0);
+      const unit = ($("itemUnit").value.trim() || "un");
+      const minQty = Number($("itemMin").value || 0);
+      const essential = $("itemEssential").checked;
 
-      inp.onchange = async () => {
-        const file = inp.files?.[0];
-        if (!file) return;
-        try {
-          const text = await file.text();
-          const data = JSON.parse(text);
-          if (!Array.isArray(data)) return toast("Arquivo inválido.", "error", "imp-bad");
+      if(!name) return toast("Digite o nome do item.");
 
-          status("Importando…", "warn", 1200);
+      const nameNorm = normalizeName(name);
 
-          for (const it of data) {
-            if (!it?.name) continue;
-            const name = String(it.name);
-            const unit = it.unit || "un";
-            const qty = Number(it.qty || 0);
-            const min_qty = Number(it.min_qty || 0);
-            const essential = (it.essential ?? true) ? true : false;
-            const name_norm = norm(name);
-
-            const { data: existing } = await supabase
-              .from("inventory_items")
-              .select("id")
-              .eq("inventory_id", currentInventoryId)
-              .eq("name_norm", name_norm)
-              .eq("unit", unit)
-              .maybeSingle();
-
-            if (existing?.id) {
-              await supabase.from("inventory_items")
-                .update({ name, qty: round(qty), min_qty: round(min_qty), essential })
-                .eq("id", existing.id);
-            } else {
-              await supabase.from("inventory_items").insert({
-                inventory_id: currentInventoryId,
-                name, name_norm, unit,
-                qty: round(qty),
-                min_qty: round(min_qty),
-                essential
-              });
-            }
-          }
-
-          toast("Importado ✅", "success", "imp-ok");
-          await loadItems(currentInventoryId);
-        } catch (e) {
-          console.error(e);
-          toast("Falha ao importar: " + (e?.message || e), "error", "imp-fail");
-        }
+      const payload = {
+        inventory_id: inventoryId,
+        name,
+        name_norm: nameNorm,
+        unit,
+        qty,
+        min_qty: minQty,
+        essential,
+        updated_by: session.user.id
       };
 
-      inp.click();
-    };
+      if(editItemId){
+        // update
+        const { error } = await supabase
+          .from("inventory_items")
+          .update(payload)
+          .eq("id", editItemId);
 
-    document.addEventListener("visibilitychange", async () => {
-      if (document.hidden) return;
-      try {
-        const u = await getSessionUser();
-        if (!u || !currentInventoryId) return;
-        await subscribeRealtime(currentInventoryId);
-        loadMembers(currentInventoryId).catch(()=>{});
-        loadItems(currentInventoryId).catch(()=>{});
-        supabase.rpc("touch_presence").catch(()=>{});
-      } catch {}
+        if(error) return toast("Erro: " + error.message);
+
+        toast("Item atualizado!");
+        clearEdit();
+      }else{
+        // insert
+        payload.created_by = session.user.id;
+
+        const { error } = await supabase
+          .from("inventory_items")
+          .insert(payload);
+
+        if(error) return toast("Erro: " + error.message);
+
+        toast("Item adicionado!");
+        clearForm();
+      }
+
+      // realtime vai atualizar todo mundo automaticamente
     });
 
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!session?.user) { showLogin(); return; }
+    $("btnCancelEdit").addEventListener("click", () => {
+      clearEdit();
+      clearForm();
+    });
 
-      try {
-        const { data: prof, error } = await supabase
-          .from("profiles")
-          .select("current_inventory_id")
-          .eq("user_id", session.user.id)
-          .maybeSingle();
-        if (error) throw error;
+    function startEdit(itemId){
+      const it = items.find(x => x.id === itemId);
+      if(!it) return;
 
-        const invId = prof?.current_inventory_id;
-        if (invId) await boot(invId);
-        else { showRegister(); toast("Logado. Vincule um inventário ou gere um novo.", "warn", "needlink"); }
-      } catch (e) {
-        console.error(e);
-        toast("Falha ao iniciar: " + (e?.message || e), "error", "boot");
-        showLogin();
+      editItemId = itemId;
+      $("formTitle").textContent = "Editar item";
+      $("btnCancelEdit").style.display = "inline-block";
+
+      $("itemName").value = it.name || "";
+      $("itemQty").value = it.qty ?? 0;
+      $("itemUnit").value = it.unit || "un";
+      $("itemMin").value = it.min_qty ?? 0;
+      $("itemEssential").checked = !!it.essential;
+
+      toast("Editando: " + it.name);
+    }
+
+    function clearEdit(){
+      editItemId = null;
+      $("formTitle").textContent = "Adicionar item";
+      $("btnCancelEdit").style.display = "none";
+    }
+
+    function clearForm(){
+      $("itemName").value = "";
+      $("itemQty").value = "";
+      $("itemMin").value = "";
+      $("itemUnit").value = "un";
+      $("itemEssential").checked = true;
+    }
+
+    // Minus / Edit / Info handlers (delegation)
+    $("itemsList").addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("button");
+      if(!btn) return;
+      const act = btn.getAttribute("data-act");
+      const id = btn.getAttribute("data-id");
+      if(!act || !id) return;
+
+      const it = items.find(x => x.id === id);
+      if(!it) return;
+
+      if(act === "edit"){
+        startEdit(id);
+        return;
+      }
+
+      if(act === "minus"){
+        const next = Math.max(0, Number(it.qty) - 1);
+        const { error } = await supabase
+          .from("inventory_items")
+          .update({ qty: next, updated_by: session.user.id })
+          .eq("id", id);
+
+        if(error) return toast("Erro: " + error.message);
+        // realtime faz o resto
+        return;
+      }
+
+      if(act === "info"){
+        openInfo(it);
+        return;
       }
     });
 
-    (async () => {
-      const u = await getSessionUser();
-      if (!u) showLogin();
-    })();
+    // =========================
+    // Modal Info: comprado/zerado + dias
+    // =========================
+    const modal = $("modalBackdrop");
+    $("btnCloseModal").addEventListener("click", closeModal);
+    modal.addEventListener("click", (e)=>{ if(e.target === modal) closeModal(); });
+
+    function openInfo(it){
+      $("modalTitle").textContent = "Info • " + it.name;
+
+      const lastBuy = it.last_buy_at ? fmtDate(it.last_buy_at) : "-";
+      const lastBuyQty = (it.last_buy_qty ?? "-");
+      const prevBuy = it.prev_buy_at ? fmtDate(it.prev_buy_at) : "-";
+      const prevBuyQty = (it.prev_buy_qty ?? "-");
+      const lastZero = it.last_zero_at ? fmtDate(it.last_zero_at) : "-";
+
+      // cálculo: quando tiver comprado e zerado, dá pra estimar quanto durou
+      let dur = null;
+      if(it.last_buy_at && it.last_zero_at){
+        // “durou” do comprado até zerar (se zerou depois de comprar)
+        const d = daysBetween(it.last_buy_at, it.last_zero_at);
+        if(d !== null) dur = d + " dia(s)";
+      }
+
+      $("modalBody").textContent =
+`Última compra: ${lastBuy} (comprou +${lastBuyQty})
+Compra anterior: ${prevBuy} (comprou +${prevBuyQty})
+Última vez zerado: ${lastZero}
+
+Duração estimada (compra → zerou): ${dur ?? "-"}
+
+Obs:
+- O sistema marca “compra” automaticamente quando a quantidade aumenta.
+- Marca “zerou” quando a quantidade cai para 0.`;
+
+      modal.classList.add("show");
+    }
+
+    function closeModal(){
+      modal.classList.remove("show");
+    }
+
+    // =========================
+    // Utils
+    // =========================
+    function normalizeName(s){
+      return (s || "")
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function escapeHtml(s){
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    // =========================
+    // Start
+    // =========================
+    boot();
   </script>
-
-  <style>
-    .status-bar{
-      position: sticky;
-      top: 0;
-      z-index: 3000;
-      padding: 10px 12px;
-      font-weight: 800;
-      font-size: 13px;
-      border-bottom: 1px solid rgba(11,18,32,.14);
-      background: #fff;
-    }
-    .status-bar.hidden{ display:none; }
-    .status-bar.warn{ background: rgba(245,158,11,.10); }
-    .status-bar.error{ background: rgba(239,68,68,.10); }
-    .status-bar.success{ background: rgba(34,197,94,.10); }
-
-    .members-list{
-      margin-top: 10px;
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .member{
-      border: 1px solid rgba(11,18,32,.14);
-      border-radius: 14px;
-      padding: 10px 12px;
-      background: #fff;
-      min-width: 160px;
-    }
-  </style>
 </body>
 </html>
