@@ -455,7 +455,9 @@
           plus.textContent = "+";
           plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
 
-          controls.append(minus, edit, info, del, qty, plus);
+          /* ordem pedida: + <quantia> - ⚙️ ℹ️ 🗑️ */
+          controls.append(plus, qty, minus, edit, info, del);
+
           row.append(left, controls);
           list.appendChild(row);
         }
@@ -592,12 +594,7 @@
             }
             renderItems();
           })
-          .subscribe((status) => {
-            console.log("[realtime items]", status);
-            if (status === "SUBSCRIBED") toast("Tempo real ativo ✅", "success", "rt-items-ok");
-            if (status === "CHANNEL_ERROR") toast("Falha no tempo real (itens).", "warn", "rt-items-err");
-            if (status === "TIMED_OUT") toast("Tempo real demorou pra conectar (itens).", "warn", "rt-items-timeout");
-          });
+          .subscribe();
 
         realtimeMembers = supabase
           .channel("rt-members-" + invId)
@@ -620,10 +617,7 @@
             const me = members.find(m => m.user_id === currentUser.id);
             $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
           })
-          .subscribe((status) => {
-            console.log("[realtime members]", status);
-            if (status === "CHANNEL_ERROR") toast("Falha no tempo real (membros).", "warn", "rt-mem-err");
-          });
+          .subscribe();
       }
 
       async function bootInventory(invId) {
@@ -786,40 +780,27 @@
         overlaySafe(true, "upsert-item");
         try {
           if (editItemId) {
-            const { data, error } = await withTimeout(
+            const { error } = await withTimeout(
               supabase.from("inventory_items")
                 .update(payload)
                 .eq("id", editItemId)
-                .eq("inventory_id", currentInventoryId)
-                .select("*")
-                .single(),
+                .eq("inventory_id", currentInventoryId),
               8000,
               "update item"
             );
             if (error) throw error;
-
-            // ✅ atualiza local imediatamente (sem depender do realtime)
-            items = items.map(x => x.id === data.id ? data : x);
-            renderItems();
 
             toast("Atualizado ✅", "success", "item-upd");
             resetEdit();
           } else {
             payload.created_by = currentUser.id;
 
-            const { data, error } = await withTimeout(
-              supabase.from("inventory_items")
-                .insert(payload)
-                .select("*")
-                .single(),
+            const { error } = await withTimeout(
+              supabase.from("inventory_items").insert(payload),
               8000,
               "insert item"
             );
             if (error) throw error;
-
-            // ✅ insere local imediatamente (sem refresh)
-            items = [data, ...items.filter(x => x.id !== data.id)];
-            renderItems();
 
             toast("Adicionado ✅", "success", "item-add");
           }
@@ -847,60 +828,44 @@
         items = items.map(x => x.id === itemId ? { ...x, qty: newQty } : x);
         renderItems();
 
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("inventory_items")
           .update({ qty: newQty })
           .eq("id", itemId)
-          .eq("inventory_id", currentInventoryId)
-          .select("*")
-          .single();
+          .eq("inventory_id", currentInventoryId);
 
         if (error) {
           console.warn(error);
           toast("Não salvou no cloud: " + error.message, "error", "qty-fail");
           try { await loadItems(currentInventoryId); } catch {}
-          return;
-        }
-
-        // garante consistência local
-        if (data) {
-          items = items.map(x => x.id === data.id ? data : x);
-          renderItems();
         }
       }
 
-      async function deleteItem(itemId, name = "") {
+      /* ===== EXCLUIR ITEM (adicionado) ===== */
+      async function deleteItem(itemId, itemName = "este item") {
         if (!currentInventoryId) return;
 
-        const label = name ? `“${name}”` : "este item";
-        if (!confirm(`Excluir ${label}?`)) return;
+        const ok = confirm(`Excluir "${itemName}"? Isso não tem volta.`);
+        if (!ok) return;
 
         // otimista
-        const prev = items.slice();
+        const backup = items;
         items = items.filter(x => x.id !== itemId);
         renderItems();
 
-        overlaySafe(true, "delete");
-        try {
-          const { error } = await withTimeout(
-            supabase.from("inventory_items")
-              .delete()
-              .eq("id", itemId)
-              .eq("inventory_id", currentInventoryId),
-            8000,
-            "delete item"
-          );
-          if (error) throw error;
+        const { error } = await supabase
+          .from("inventory_items")
+          .delete()
+          .eq("id", itemId)
+          .eq("inventory_id", currentInventoryId);
 
-          toast("Excluído ✅", "success", "item-del");
-        } catch (e) {
-          console.error(e);
-          items = prev;
+        if (error) {
+          // desfaz se falhar
+          items = backup;
           renderItems();
-          toast("Falha ao excluir: " + (e?.message || e), "error", "del-fail");
-          try { await loadItems(currentInventoryId); } catch {}
-        } finally {
-          overlaySafe(false, "delete");
+          toast("Falha ao excluir: " + error.message, "error", "del-fail");
+        } else {
+          toast("Excluído ✅", "success", "del-ok");
         }
       }
 
@@ -1167,6 +1132,7 @@
         } catch (e) {
           console.error(e);
           toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
+          // não joga pro register automaticamente
         } finally {
           booting = false;
         }
