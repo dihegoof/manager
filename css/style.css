@@ -381,3 +381,62 @@ button:disabled{
   .item{ align-items: flex-start; }
   .controls{ width: 100%; justify-content: flex-end; }
 }
+
+/* ===== FIX MOBILE LISTA + BADGES (adicionado) ===== */
+
+/* badges da linha de baixo não sobrepõem */
+.sub{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+  line-height: 1.25;
+}
+.sub .pill{ display:inline-flex; }
+
+/* evita botão vazar do card */
+.item{
+  overflow: hidden;
+}
+
+/* controla bem os botões */
+.controls{
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.controls button{
+  min-width: 42px;
+  min-height: 42px;
+  padding: 10px 10px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height: 1;
+}
+
+/* no celular: item vira coluna e controles vão pra linha de baixo */
+@media (max-width: 540px){
+  .item{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .controls{
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  /* qty fica central e não estoura */
+  .controls .qty{
+    flex: 1;
+    min-width: 110px;
+    text-align: center;
+  }
+
+  /* deixa os botões laterais consistentes */
+  .controls button{
+    flex: 0 0 auto;
+  }
+}
