@@ -8,21 +8,9 @@
 </head>
 
 <body>
-  <div id="overlay" class="overlay"><div class="spinner"></div></div>
+  <div id="statusBar" class="status-bar hidden"></div>
   <div id="toastHost" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- Modal (info do item) -->
-  <div id="modal" class="modal hidden" aria-hidden="true">
-    <div class="modal-card">
-      <div class="modal-head">
-        <div class="modal-title" id="modalTitle">Info</div>
-        <button id="modalClose" class="small ghost" type="button">Fechar</button>
-      </div>
-      <div id="modalBody" class="modal-body"></div>
-    </div>
-  </div>
-
-  <!-- ===== AUTH ===== -->
   <div id="authView" class="center-screen">
     <div class="card login-card">
       <h1 class="title" id="authTitle">Entrar</h1>
@@ -67,10 +55,13 @@
           <button id="backToLoginBtn" class="small" type="button">Voltar</button>
         </div>
       </div>
+
+      <div class="muted" style="margin-top:10px">
+        Dica: se “Gerar inventário” estiver desligado, informe um código de 6 caracteres.
+      </div>
     </div>
   </div>
 
-  <!-- ===== APP ===== -->
   <div id="appView" class="wrap hidden">
     <div class="card">
       <div class="row header-row">
@@ -78,28 +69,18 @@
         <button id="logoutBtn" class="small">Sair</button>
       </div>
 
-      <div class="row" style="justify-content:space-between; align-items:center; gap:10px;">
-        <div class="muted" style="margin-top:6px;">
-          Código do inventário:
-          <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
-        </div>
-        <div id="netBadge" class="pill net warn">sincronizando…</div>
+      <div class="muted" style="margin-top:6px;">
+        Código do inventário:
+        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
       </div>
 
-      <!-- ===== MEMBROS (visu simples) ===== -->
       <div class="divider"></div>
-      <div class="members-box">
+      <div id="membersBox">
         <div class="row header-row" style="gap:8px;">
-          <div class="members-title">Membros</div>
-          <div class="row" style="gap:8px; justify-content:flex-end; flex:1;">
-            <button id="toggleMembersBtn" class="small ghost" type="button">Mostrar</button>
-            <button id="reloadMembersBtn" class="small ghost hidden" type="button">Atualizar</button>
-          </div>
+          <div style="font-weight:900;">Membros</div>
+          <div class="muted" style="margin:0;">(tempo real)</div>
         </div>
-        <div id="membersWrap" class="hidden">
-          <div class="muted" style="margin-top:4px;">⭐ = dono • status = último acesso</div>
-          <div id="membersList" class="members-list"></div>
-        </div>
+        <div id="membersList" class="members-list"></div>
       </div>
 
       <div class="divider"></div>
@@ -110,7 +91,6 @@
 
       <div class="divider"></div>
 
-      <!-- ADD / EDIT -->
       <div class="row">
         <input id="name" placeholder="Novo item:" />
         <select id="unit">
@@ -122,28 +102,25 @@
         </select>
         <input id="qty" type="number" step="0.1" placeholder="Qtd" class="w120" />
         <input id="min" type="number" step="0.1" placeholder="Mín" class="w120" />
-        <button id="add">Adicionar</button>
-        <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
-      </div>
 
-      <div class="row mt10" style="align-items:center;">
-        <label class="checkline">
-          <input id="confirmBuy" type="checkbox" />
-          Registrar compra (salvar “última compra”)
+        <label class="checkline" style="align-items:center;">
+          <input id="essential" type="checkbox" checked />
+          Essencial
         </label>
+
+        <button id="add">Salvar</button>
       </div>
 
-      <div class="muted" id="editHint">
-        Dica: marque “Registrar compra” quando você realmente comprou no mercado (isso atualiza o histórico).
+      <div class="muted" id="editHint" style="display:none;">
+        Editando item… ajuste os campos e toque em “Salvar”.
       </div>
 
       <div class="divider"></div>
 
       <div class="row actions">
         <button class="small" id="filterList">Filtrar lista</button>
-        <button class="small" id="export">Exportar (backup)</button>
-        <button class="small" id="import">Importar</button>
-        <button class="small" id="clear">Zerar tudo</button>
+        <button class="small" id="export">Exportar (texto)</button>
+        <button class="small" id="import">Importar (json)</button>
       </div>
 
       <div class="list" id="list"></div>
@@ -167,31 +144,33 @@
     const norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const round = (v) => Math.round((Number(v) + Number.EPSILON) * 10) / 10;
 
-    // Footer
     $("footer").innerHTML = `© ${new Date().getFullYear()}
       <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
       — Todos os direitos reservados`;
 
-    // ===== Toast =====
-    const lastToastAt = new Map();
-    function normalizeToastType(type) {
-      if (type === "success" || type === "error" || type === "warn") return type;
-      return "warn";
+    let statusTimer = null;
+    function status(msg, kind = "warn", ms = 1400) {
+      const el = $("statusBar");
+      el.textContent = msg;
+      el.className = "status-bar " + kind;
+      el.classList.remove("hidden");
+      clearTimeout(statusTimer);
+      if (ms) statusTimer = setTimeout(() => el.classList.add("hidden"), ms);
     }
+
+    const lastToastAt = new Map();
     function toast(message, type = "warn", key = "") {
-      const t = normalizeToastType(type);
       const msg = (message || "").toString().trim();
       if (!msg) return;
-
-      const k = key || (t + ":" + msg);
+      const k = key || (type + ":" + msg);
       const now = Date.now();
       const last = lastToastAt.get(k) || 0;
-      if (now - last < 900) return;
+      if (now - last < 1200) return;
       lastToastAt.set(k, now);
 
       const host = $("toastHost");
       const wrap = document.createElement("div");
-      wrap.className = `toast ${t}`;
+      wrap.className = `toast ${type}`;
 
       const bubble = document.createElement("div");
       bubble.className = "toast-bubble";
@@ -205,73 +184,12 @@
       setTimeout(() => wrap.remove(), 3800);
     }
 
-    // ===== Overlay =====
-    function overlay(on) { $("overlay").classList.toggle("on", !!on); }
-    let overlayTimer = null;
-    function overlaySafe(on, reason = "") {
-      overlay(!!on);
-      clearTimeout(overlayTimer);
-      if (on) {
-        overlayTimer = setTimeout(() => {
-          overlay(false);
-          toast("Sem conexão no momento. Usando cache local.", "warn", "overlay-timeout");
-          console.warn("Overlay timeout:", reason);
-          setNet("offline");
-        }, 12000);
-      }
-    }
-
-    function withTimeout(promise, ms, label = "operação") {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`${label}: timeout (${ms}ms)`)), ms)
-        )
-      ]);
-    }
-
-    function isAbortError(e) {
-      const msg = (e?.message || "").toLowerCase();
-      return e?.name === "AbortError" || msg.includes("signal is aborted") || msg.includes("aborted");
-    }
-
-    async function runTask(label, fn, { showOverlay = true, timeoutMs = 0 } = {}) {
-      if (showOverlay) overlaySafe(true, label);
-      try {
-        if (!timeoutMs || timeoutMs <= 0) return await fn();
-        return await withTimeout(fn(), timeoutMs, label);
-      } catch (e) {
-        if (isAbortError(e)) {
-          console.warn(label, "AbortError (ignorado):", e?.message || e);
-          return null;
-        }
-        console.error(label, e);
-        toast(`${label}: ${e?.message || e}`, "error", "err:" + label);
-        throw e;
-      } finally {
-        if (showOverlay) overlaySafe(false, label);
-      }
-    }
-
-    window.addEventListener("unhandledrejection", (e) => {
-      console.error("unhandledrejection:", e?.reason);
-      overlaySafe(false, "unhandled");
-      if (!isAbortError(e?.reason)) toast("Erro: " + (e?.reason?.message || e?.reason || "falha"), "error", "unhandled");
-    });
-    window.addEventListener("error", (e) => {
-      console.error("window error:", e?.message, e);
-      overlaySafe(false, "window-error");
-      toast("Erro JS: " + (e?.message || "falha"), "error", "window-error");
-    });
-
-    // ===== Views =====
     function showLogin() {
       $("authTitle").textContent = "Entrar";
       $("loginForm").classList.remove("hidden");
       $("registerForm").classList.add("hidden");
       $("authView").classList.remove("hidden");
       $("appView").classList.add("hidden");
-      $("authView").classList.add("fade-in");
     }
     function showRegister() {
       $("authTitle").textContent = "Registrar";
@@ -280,12 +198,10 @@
       $("authView").classList.remove("hidden");
       $("appView").classList.add("hidden");
       syncRegisterUI();
-      $("authView").classList.add("fade-in");
     }
     function showApp() {
       $("authView").classList.add("hidden");
       $("appView").classList.remove("hidden");
-      $("appView").classList.add("fade-in");
     }
     function syncRegisterUI() {
       const gen = $("genInv").checked;
@@ -293,31 +209,19 @@
       if (gen) $("invCode").value = "";
     }
 
-    // ===== Status rede =====
-    function setNet(mode) {
-      const el = $("netBadge");
-      el.classList.remove("good","warn","bad");
-      if (mode === "online") { el.textContent = "online"; el.classList.add("good"); }
-      else if (mode === "offline") { el.textContent = "offline"; el.classList.add("bad"); }
-      else { el.textContent = "sincronizando…"; el.classList.add("warn"); }
+    async function getSessionUser() {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.user || null;
     }
 
-    // ===== local cache =====
-    const KEY_PREFIX = "home_inventory_items_";
-    const loadLocal = (invId) => { try { return JSON.parse(localStorage.getItem(KEY_PREFIX + invId)) || []; } catch { return []; } };
-    const saveLocal = (invId, arr) => localStorage.setItem(KEY_PREFIX + invId, JSON.stringify(arr));
-
-    // ===== state =====
     let currentInventoryId = null;
     let inviteCode = "";
     let items = [];
+    let members = [];
+    let itemsChannel = null;
+    let membersChannel = null;
     let showOnlyNeeds = false;
-    let realtimeChannel = null;
     let editingId = null;
-    let me = { user_id: null, display_name: "Você" };
-    let membersOpen = false;
-    let membersRefreshTimer = null;
-    let lastSeenTimer = null;
 
     function needsBuy(it) {
       const qty = Number(it.qty ?? 0);
@@ -325,43 +229,42 @@
       return qty <= 0 || (min > 0 && qty <= min);
     }
 
-    // ===== Modal =====
-    function openModal(title, html) {
-      $("modalTitle").textContent = title || "Info";
-      $("modalBody").innerHTML = html || "";
-      $("modal").classList.remove("hidden");
-      $("modal").setAttribute("aria-hidden", "false");
-    }
-    function closeModal() {
-      $("modal").classList.add("hidden");
-      $("modal").setAttribute("aria-hidden", "true");
-      $("modalBody").innerHTML = "";
-    }
-    $("modalClose").onclick = closeModal;
-    $("modal").addEventListener("click", (e) => { if (e.target?.id === "modal") closeModal(); });
-
-    function fmtDate(ts) {
+    function fmtSeen(ts) {
       if (!ts) return "—";
       const d = new Date(ts);
-      if (isNaN(d.getTime())) return "—";
-      return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-    }
-    function relTime(ts) {
-      if (!ts) return "nunca";
-      const d = new Date(ts).getTime();
-      if (!isFinite(d)) return "—";
-      const diff = Date.now() - d;
-      const m = Math.round(diff/60000);
-      if (m < 1) return "agora";
-      if (m < 60) return `há ${m} min`;
-      const h = Math.round(m/60);
+      const now = new Date();
+      const diff = Math.floor((now - d) / 1000);
+      if (diff < 60) return "agora";
+      const min = Math.floor(diff/60);
+      if (min < 60) return `há ${min} min`;
+      const h = Math.floor(min/60);
       if (h < 24) return `há ${h} h`;
-      const dd = Math.round(h/24);
-      return `há ${dd} d`;
+      const days = Math.floor(h/24);
+      return `há ${days} d`;
     }
 
-    // ===== render =====
-    function render() {
+    function renderMembers() {
+      const box = $("membersList");
+      box.innerHTML = "";
+      if (!members.length) {
+        const e = document.createElement("div");
+        e.className = "sub";
+        e.textContent = "Nenhum membro carregado.";
+        box.appendChild(e);
+        return;
+      }
+      const sorted = [...members].sort((a,b) => (a.role === "owner" ? -1 : 1) - (b.role === "owner" ? -1 : 1) || (a.display_name||"").localeCompare(b.display_name||""));
+      for (const m of sorted) {
+        const row = document.createElement("div");
+        row.className = "member";
+        const star = m.role === "owner" ? " ⭐" : "";
+        row.innerHTML = `<div style="font-weight:900">${m.display_name || "Usuário"}${star}</div>
+                         <div class="sub">visto: ${fmtSeen(m.last_seen_at)}</div>`;
+        box.appendChild(row);
+      }
+    }
+
+    function renderItems() {
       const q = norm($("search").value);
       const list = $("list");
       list.innerHTML = "";
@@ -372,7 +275,7 @@
           const matchesNeeds = !showOnlyNeeds || needsBuy(it);
           return matchesSearch && matchesNeeds;
         })
-        .sort((a, b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
+        .sort((a,b) => (a.name||"").localeCompare((b.name||""), "pt-BR"));
 
       if (!filtered.length) {
         const empty = document.createElement("div");
@@ -388,11 +291,26 @@
 
         const left = document.createElement("div");
         const needs = needsBuy(it);
+
+        const lastBuy = it.last_buy_at ? new Date(it.last_buy_at).toLocaleDateString("pt-BR") : "—";
+        const lastZero = it.last_zero_at ? new Date(it.last_zero_at).toLocaleDateString("pt-BR") : "—";
+        let dur = "";
+        if (it.last_buy_at && it.last_zero_at) {
+          const d1 = new Date(it.last_buy_at);
+          const d2 = new Date(it.last_zero_at);
+          const days = Math.round((d2 - d1) / (1000*60*60*24));
+          if (Number.isFinite(days)) dur = ` • durou ~${days}d`;
+        }
+
         left.innerHTML = `
           <div class="name">${it.name}</div>
           <div class="sub">
             ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
+            ${it.essential ? " • essencial" : " • não essencial"}
             ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
+          </div>
+          <div class="sub">
+            última compra: ${lastBuy} • último zerado: ${lastZero}${dur}
           </div>
         `;
 
@@ -403,15 +321,10 @@
         minus.textContent = "−";
         minus.onclick = () => updateQty(it.id, it.unit === "un" ? -1 : -0.1);
 
-        const gear = document.createElement("button");
-        gear.textContent = "⚙️";
-        gear.title = "Editar item";
-        gear.onclick = () => startEdit(it.id);
-
-        const info = document.createElement("button");
-        info.textContent = "ℹ️";
-        info.title = "Info / histórico";
-        info.onclick = () => showItemInfo(it);
+        const edit = document.createElement("button");
+        edit.textContent = "⚙️";
+        edit.title = "Editar";
+        edit.onclick = () => beginEdit(it);
 
         const qty = document.createElement("div");
         qty.className = "qty pill";
@@ -421,332 +334,107 @@
         plus.textContent = "+";
         plus.onclick = () => updateQty(it.id, it.unit === "un" ? +1 : +0.1);
 
-        const del = document.createElement("button");
-        del.textContent = "🗑️";
-        del.title = "Remover";
-        del.onclick = () => removeItem(it.id);
-
-        controls.append(minus, gear, info, qty, plus, del);
+        controls.append(minus, edit, qty, plus);
         row.append(left, controls);
         list.appendChild(row);
       }
     }
 
-    function showItemInfo(it) {
-      const buyAt = it.last_buy_at;
-      const zeroAt = it.last_zero_at;
-
-      let dur = "—";
-      if (buyAt && zeroAt) {
-        const a = new Date(buyAt).getTime();
-        const b = new Date(zeroAt).getTime();
-        if (isFinite(a) && isFinite(b) && b >= a) {
-          const days = Math.round((b - a) / (1000*60*60*24));
-          dur = `${days} dia(s)`;
-        }
-      }
-
-      openModal(
-        it.name,
-        `
-          <div class="info-grid">
-            <div><b>Unidade:</b> ${it.unit}</div>
-            <div><b>Qtd atual:</b> ${it.qty}</div>
-            <div><b>Mínimo:</b> ${it.min_qty || 0}</div>
-          </div>
-          <div class="divider"></div>
-          <div class="info-grid">
-            <div><b>Última compra:</b> ${fmtDate(buyAt)}</div>
-            <div><b>Qtd comprada:</b> ${it.last_buy_qty ?? "—"}</div>
-            <div><b>Último zerado:</b> ${fmtDate(zeroAt)}</div>
-            <div><b>Qtd ao zerar:</b> ${it.last_zero_qty ?? "—"}</div>
-            <div><b>Durou:</b> ${dur}</div>
-          </div>
-        `
-      );
+    function beginEdit(it) {
+      editingId = it.id;
+      $("name").value = it.name;
+      $("unit").value = it.unit;
+      $("qty").value = it.qty;
+      $("min").value = it.min_qty || 0;
+      $("essential").checked = !!it.essential;
+      $("editHint").style.display = "block";
+      toast("Editando: ajuste e toque em Salvar", "warn", "edit");
     }
 
-    // ===== DB helpers =====
-    async function loadProfile(userId) {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, current_inventory_id, last_seen_at")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data || null;
+    function clearEdit() {
+      editingId = null;
+      $("name").value = "";
+      $("qty").value = "";
+      $("min").value = "";
+      $("essential").checked = true;
+      $("editHint").style.display = "none";
     }
 
-    async function upsertProfileSelf(userId, displayName, currentInventoryId = null) {
-      const payload = { user_id: userId };
-      if (displayName) payload.display_name = displayName;
-      if (currentInventoryId !== undefined) payload.current_inventory_id = currentInventoryId;
-      payload.last_seen_at = new Date().toISOString();
-
-      const { error } = await supabase
-        .from("profiles")
-        .upsert(payload, { onConflict: "user_id" });
-
-      if (error) throw error;
-    }
-
-    async function touchLastSeen() {
-      if (!me?.user_id) return;
-      try {
-        await supabase.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("user_id", me.user_id);
-      } catch {}
-    }
-
-    async function loadInventoryMeta(inventoryId) {
+    async function loadInventoryMeta(invId) {
       const { data, error } = await supabase
         .from("inventories")
         .select("id, invite_code")
-        .eq("id", inventoryId)
+        .eq("id", invId)
         .single();
       if (error) throw error;
-      return data;
+      inviteCode = data?.invite_code || "";
+      $("invCodeShow").textContent = inviteCode || "(sem código)";
     }
 
-    async function fetchItems(inventoryId) {
+    async function loadItems(invId) {
       const { data, error } = await supabase
         .from("inventory_items")
         .select("*")
-        .eq("inventory_id", inventoryId);
+        .eq("inventory_id", invId);
       if (error) throw error;
-      return Array.isArray(data) ? data : [];
+      items = Array.isArray(data) ? data : [];
+      renderItems();
     }
 
-    async function insertItem(row) {
+    async function loadMembers(invId) {
       const { data, error } = await supabase
-        .from("inventory_items")
-        .insert(row)
-        .select("*")
-        .single();
+        .from("inventory_members")
+        .select("user_id, role, display_name, last_seen_at")
+        .eq("inventory_id", invId);
       if (error) throw error;
-      return data;
+      members = Array.isArray(data) ? data : [];
+      renderMembers();
     }
 
-    async function updateItem(id, patch) {
-      const { data, error } = await supabase
-        .from("inventory_items")
-        .update(patch)
-        .eq("id", id)
-        .select("*")
-        .single();
-      if (error) throw error;
-      return data;
-    }
-
-    async function deleteItem(id) {
-      const { error } = await supabase.from("inventory_items").delete().eq("id", id);
-      if (error) throw error;
-    }
-
-    // ===== realtime items =====
-    async function startRealtime(inventoryId) {
-      await stopRealtime();
-
-      realtimeChannel = supabase
-        .channel("inv-items-" + inventoryId)
-        .on("postgres_changes", {
-          event: "*",
-          schema: "public",
-          table: "inventory_items",
-          filter: `inventory_id=eq.${inventoryId}`,
-        }, (payload) => {
-          const ev = payload?.eventType;
-          if (ev === "INSERT" && payload.new) upsertLocalItem(payload.new);
-          else if (ev === "UPDATE" && payload.new) upsertLocalItem(payload.new);
-          else if (ev === "DELETE" && payload.old) {
-            items = items.filter(x => x.id !== payload.old.id);
-            saveLocal(inventoryId, items);
-            render();
-          }
+    async function subscribeRealtime(invId) {
+      if (itemsChannel) await supabase.removeChannel(itemsChannel);
+      itemsChannel = supabase.channel("items-" + invId)
+        .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items", filter: `inventory_id=eq.${invId}` }, (payload) => {
+          const n = payload.new;
+          const o = payload.old;
+          if (payload.eventType === "INSERT") items.push(n);
+          else if (payload.eventType === "UPDATE") {
+            const idx = items.findIndex(x => x.id === n.id);
+            if (idx >= 0) items[idx] = n;
+          } else if (payload.eventType === "DELETE") items = items.filter(x => x.id !== o.id);
+          renderItems();
         })
-        .subscribe((status) => { if (status === "SUBSCRIBED") setNet("online"); });
+        .subscribe();
+
+      if (membersChannel) await supabase.removeChannel(membersChannel);
+      membersChannel = supabase.channel("members-" + invId)
+        .on("postgres_changes", { event: "*", schema: "public", table: "inventory_members", filter: `inventory_id=eq.${invId}` }, (payload) => {
+          const n = payload.new;
+          const o = payload.old;
+          if (payload.eventType === "INSERT") members.push(n);
+          else if (payload.eventType === "UPDATE") {
+            const idx = members.findIndex(x => x.user_id === n.user_id);
+            if (idx >= 0) members[idx] = n;
+          } else if (payload.eventType === "DELETE") members = members.filter(x => x.user_id !== o.user_id);
+          renderMembers();
+        })
+        .subscribe();
     }
 
-    async function stopRealtime() {
-      if (realtimeChannel) await supabase.removeChannel(realtimeChannel);
-      realtimeChannel = null;
-    }
-
-    function upsertLocalItem(row) {
-      row.name_norm = row.name_norm || norm(row.name);
-      const idx = items.findIndex(x => x.id === row.id);
-      if (idx >= 0) items[idx] = row;
-      else items.push(row);
-      saveLocal(currentInventoryId, items);
-      render();
-    }
-
-    // ===== Boot flow =====
-    async function bootToInventory(inventoryId) {
-      currentInventoryId = inventoryId;
-
-      items = loadLocal(inventoryId) || [];
+    async function boot(invId) {
+      currentInventoryId = invId;
       showApp();
-      render();
-      setNet(navigator.onLine ? "sync" : "offline");
-
-      const meta = await runTask("Sincronizar", async () => {
-        const [m, cloudItems] = await Promise.all([
-          loadInventoryMeta(inventoryId),
-          fetchItems(inventoryId),
-        ]);
-        return { m, cloudItems };
-      }, { showOverlay: false, timeoutMs: 25000 });
-
-      if (meta?.m) {
-        inviteCode = meta.m.invite_code || "";
-        $("invCodeShow").textContent = inviteCode || "(sem código)";
-      }
-      if (meta?.cloudItems) {
-        items = meta.cloudItems.map(x => ({ ...x, name_norm: x.name_norm || norm(x.name) }));
-        saveLocal(inventoryId, items);
-        render();
-        setNet("online");
-      } else {
-        setNet(navigator.onLine ? "sync" : "offline");
-      }
-
-      if (!document.hidden) await startRealtime(inventoryId);
-
-      toast("Sincronizado ✅", "success", "synced");
-
-      if (membersOpen) await refreshMembers();
-      startPresenceLoop();
+      status("Sincronizando…", "warn", 1200);
+      await Promise.all([
+        loadInventoryMeta(invId),
+        loadItems(invId),
+        loadMembers(invId),
+        subscribeRealtime(invId),
+      ]);
+      supabase.rpc("touch_presence").catch(() => {});
+      toast("Online ✅", "success", "online");
     }
 
-    async function bootFromProfile(userId) {
-      const prof = await runTask("Carregar perfil", async () => await loadProfile(userId), { showOverlay: true, timeoutMs: 20000 });
-
-      if (!prof) {
-        await runTask("Criar perfil", async () => await upsertProfileSelf(userId, "Usuário", null), { showOverlay: true, timeoutMs: 20000 });
-        showRegister();
-        toast("Complete seu cadastro (nome + inventário).", "warn", "need-setup");
-        return;
-      }
-
-      me = { user_id: prof.user_id, display_name: prof.display_name || "Você" };
-
-      if (!prof.current_inventory_id) {
-        showRegister();
-        toast("Você está logado. Gere um inventário ou informe um código.", "warn", "need-inv");
-        return;
-      }
-
-      await bootToInventory(prof.current_inventory_id);
-    }
-
-    // ===== Register setup via RPC =====
-    const PENDING_KEY = "pending_inv_setup_v3";
-    const setPendingSetup = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
-    const getPendingSetup = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
-    const clearPendingSetup = () => localStorage.removeItem(PENDING_KEY);
-
-    async function finalizePendingSetupIfNeeded(sessionUser = null) {
-      const pending = getPendingSetup();
-      if (!pending) return false;
-
-      const user = sessionUser || (await supabase.auth.getUser()).data?.user;
-      if (!user) return false;
-
-      try {
-        await runTask("Criar perfil", async () => await upsertProfileSelf(user.id, pending.displayName || "Usuário", null), { showOverlay: true, timeoutMs: 20000 });
-
-        let inventoryId = null;
-
-        if (pending.mode === "create") {
-          const { data, error } = await supabase.rpc("create_inventory_and_set_profile", { p_display_name: pending.displayName || "Usuário" });
-          if (error) throw error;
-          inventoryId = data?.inventory_id || data?.[0]?.inventory_id;
-        } else {
-          const { data, error } = await supabase.rpc("join_inventory_by_code", { p_code: pending.code, p_display_name: pending.displayName || "Usuário" });
-          if (error) throw error;
-          inventoryId = data?.inventory_id || data?.[0]?.inventory_id;
-        }
-
-        if (!inventoryId) throw new Error("Não consegui obter o inventário.");
-
-        clearPendingSetup();
-        await bootToInventory(inventoryId);
-        return true;
-      } catch (e) {
-        console.error(e);
-        clearPendingSetup();
-        showRegister();
-        toast("Falhou ao finalizar inventário: " + (e?.message || e), "warn", "finalize-fail");
-        return true;
-      }
-    }
-
-    // ===== Members =====
-    async function refreshMembers() {
-      if (!currentInventoryId) return;
-      $("reloadMembersBtn").classList.remove("hidden");
-
-      const data = await runTask("Membros", async () => {
-        const { data, error } = await supabase
-          .from("inventory_members_view")
-          .select("user_id, role, display_name, last_seen_at")
-          .eq("inventory_id", currentInventoryId);
-        if (error) throw error;
-        return data || [];
-      }, { showOverlay: false, timeoutMs: 15000 });
-
-      const list = $("membersList");
-      list.innerHTML = "";
-
-      if (!Array.isArray(data) || !data.length) {
-        const empty = document.createElement("div");
-        empty.className = "sub";
-        empty.textContent = "Sem membros.";
-        list.appendChild(empty);
-        return;
-      }
-
-      data.sort((a,b) => {
-        if ((a.role==="owner") !== (b.role==="owner")) return a.role==="owner" ? -1 : 1;
-        return (a.display_name||"").localeCompare((b.display_name||""), "pt-BR");
-      });
-
-      for (const m of data) {
-        const row = document.createElement("div");
-        row.className = "member-row";
-        const isMe = m.user_id === me.user_id;
-
-        const nm = document.createElement("div");
-        nm.innerHTML = `<b>${m.display_name || "Usuário"}</b> ${m.role==="owner" ? "⭐" : ""} ${isMe ? '<span class="pill tiny">(você)</span>' : ""}`;
-
-        const st = document.createElement("div");
-        st.className = "sub";
-        st.textContent = "último acesso: " + relTime(m.last_seen_at);
-
-        row.append(nm, st);
-        list.appendChild(row);
-      }
-    }
-
-    function startMembersLoop() {
-      stopMembersLoop();
-      membersRefreshTimer = setInterval(() => {
-        if (membersOpen && document.visibilityState === "visible") refreshMembers();
-      }, 60000);
-    }
-    function stopMembersLoop() {
-      if (membersRefreshTimer) clearInterval(membersRefreshTimer);
-      membersRefreshTimer = null;
-    }
-
-    function startPresenceLoop() {
-      if (lastSeenTimer) clearInterval(lastSeenTimer);
-      touchLastSeen();
-      lastSeenTimer = setInterval(() => { if (document.visibilityState === "visible") touchLastSeen(); }, 30000);
-    }
-
-    // ===== UI events =====
     $("openRegisterBtn").onclick = () => showRegister();
     $("backToLoginBtn").onclick = () => showLogin();
     $("genInv").addEventListener("change", syncRegisterUI);
@@ -754,19 +442,11 @@
     $("loginBtn").onclick = async () => {
       const email = $("loginEmail").value.trim();
       const password = $("loginPass").value;
+      if (!email || !password) return toast("Informe email e senha.", "warn", "login-missing");
 
-      try {
-        await runTask("Login", async () => {
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
-          if (error) throw error;
-        }, { showOverlay: true });
-
-        toast("Logado ✅", "success", "logged");
-      } catch (e) {
-        const msg = (e?.message || "").toLowerCase();
-        if (msg.includes("invalid login credentials")) return toast("Email ou senha inválidos.", "warn", "bad-creds");
-        if (!isAbortError(e)) toast("Falha no login: " + (e?.message || e), "error", "login-fail");
-      }
+      status("Entrando…", "warn", 1500);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return toast(error.message, "error", "login-error");
     };
 
     $("registerBtn").onclick = async () => {
@@ -774,106 +454,179 @@
       const email = $("regEmail").value.trim();
       const password = $("regPass").value;
       const gen = $("genInv").checked;
-      const code = ($("invCode").value || "").trim().toUpperCase();
+      const code = ($("invCode").value || "").trim().toUpperCase().replace(/\s+/g, "");
 
       if (!displayName) return toast("Informe seu nome.", "warn", "reg-name");
       if (!email) return toast("Informe seu email.", "warn", "reg-email");
       if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warn", "reg-pass");
-      if (!gen && !code) return toast("Informe o código do inventário.", "warn", "reg-code");
+      if (!gen && (!code || code.length !== 6)) return toast("Informe um código válido (6 caracteres).", "warn", "reg-code");
 
-      setPendingSetup({ displayName, mode: gen ? "create" : "join", code: gen ? "" : code, createdAt: Date.now() });
+      status("Criando conta…", "warn", 1500);
+
+      const { data, error } = await supabase.auth.signUp({
+        email, password,
+        options: { emailRedirectTo: APP_URL }
+      });
+
+      if (error) return toast(error.message, "error", "signup-error");
+
+      if (!data?.session?.user) {
+        toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
+        showLogin();
+        return;
+      }
 
       try {
-        await runTask("Criar conta", async () => {
-          const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: { emailRedirectTo: APP_URL },
+        let invId = null;
+        if (gen) {
+          const { data: r, error: e } = await supabase.rpc("create_inventory_and_set_profile", {
+            p_name: "Inventário da Casa",
+            p_display_name: displayName
           });
-          if (error) throw error;
-
-          if (!data?.session?.user) {
-            clearPendingSetup();
-            toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
-            showLogin();
-            $("loginEmail").value = email;
-            return;
-          }
-
-          await finalizePendingSetupIfNeeded(data.session.user);
-        }, { showOverlay: true });
-
-      } catch (e) {
-        const msg = (e?.message || "").toLowerCase();
-        if (msg.includes("already registered") || msg.includes("user already registered")) {
-          clearPendingSetup();
-          toast("Esse email já tem conta. Faz login 😊", "warn", "already");
-          showLogin();
-          $("loginEmail").value = email;
-          return;
+          if (e) throw e;
+          invId = r?.[0]?.inventory_id;
+        } else {
+          const { data: r, error: e } = await supabase.rpc("join_inventory_by_code", {
+            p_code: code,
+            p_display_name: displayName
+          });
+          if (e) throw e;
+          invId = r?.[0]?.inventory_id;
         }
 
-        clearPendingSetup();
-        if (!isAbortError(e)) toast("Falha no cadastro: " + (e?.message || e), "error", "signup-fail");
+        if (!invId) throw new Error("Não consegui obter o inventário.");
+        await boot(invId);
+      } catch (e) {
+        console.error(e);
+        toast("Falhou ao finalizar inventário: " + (e?.message || e), "error", "finalize");
+        showLogin();
       }
     };
 
     $("logoutBtn").onclick = async () => {
-      overlaySafe(true, "logout");
-      try {
-        await stopRealtime();
-        if (lastSeenTimer) clearInterval(lastSeenTimer);
-        await supabase.auth.signOut();
-        currentInventoryId = null;
-        items = [];
-        showLogin();
-        toast("Saiu.", "warn", "logout");
-      } finally {
-        overlaySafe(false, "logout");
-      }
+      status("Saindo…", "warn", 1200);
+      if (itemsChannel) await supabase.removeChannel(itemsChannel);
+      if (membersChannel) await supabase.removeChannel(membersChannel);
+      itemsChannel = null; membersChannel = null;
+      currentInventoryId = null;
+      items = []; members = [];
+      clearEdit();
+      await supabase.auth.signOut();
+      showLogin();
     };
 
     $("invCodeShow").onclick = async () => {
       const t = $("invCodeShow").textContent || "";
       if (!t) return;
-      try {
-        await navigator.clipboard.writeText(t);
-        toast("Código copiado ✅", "success", "copy-code");
-      } catch {
-        toast("Não consegui copiar.", "error", "copy-fail");
+      try { await navigator.clipboard.writeText(t); toast("Código copiado ✅", "success", "copy"); }
+      catch { toast("Não consegui copiar.", "error", "copy-fail"); }
+    };
+
+    async function upsertItem() {
+      if (!currentInventoryId) return;
+
+      const name = $("name").value.trim();
+      const unit = $("unit").value;
+      const qty = Number($("qty").value || 0);
+      const minQty = Number($("min").value || 0);
+      const essential = !!$("essential").checked;
+      if (!name) return toast("Informe o nome do item.", "warn", "no-name");
+
+      const name_norm = norm(name);
+      status("Salvando…", "warn", 900);
+
+      if (editingId) {
+        const { error } = await supabase
+          .from("inventory_items")
+          .update({ name, name_norm, unit, qty: round(qty), min_qty: round(minQty), essential })
+          .eq("id", editingId)
+          .eq("inventory_id", currentInventoryId);
+        if (error) return toast(error.message, "error", "upd");
+        toast("Atualizado ✅", "success", "upd-ok");
+        clearEdit();
+        return;
       }
-    };
 
-    $("toggleMembersBtn").onclick = async () => {
-      membersOpen = !membersOpen;
-      $("membersWrap").classList.toggle("hidden", !membersOpen);
-      $("reloadMembersBtn").classList.toggle("hidden", !membersOpen);
-      $("toggleMembersBtn").textContent = membersOpen ? "Ocultar" : "Mostrar";
-      if (membersOpen) {
-        await refreshMembers();
-        startMembersLoop();
-      } else stopMembersLoop();
-    };
-    $("reloadMembersBtn").onclick = async () => refreshMembers();
+      const { data: existing } = await supabase
+        .from("inventory_items")
+        .select("id, qty")
+        .eq("inventory_id", currentInventoryId)
+        .eq("name_norm", name_norm)
+        .eq("unit", unit)
+        .maybeSingle();
 
-    $("add").onclick = () => addOrUpdateItem();
-    $("cancelEdit").onclick = () => cancelEdit();
-    $("search").addEventListener("input", render);
-    $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") addOrUpdateItem(); });
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("inventory_items")
+          .update({
+            name,
+            qty: round(Number(existing.qty || 0) + qty),
+            min_qty: round(minQty),
+            essential
+          })
+          .eq("id", existing.id);
+        if (error) return toast(error.message, "error", "upsert2");
+        toast("Somado ✅", "success", "upsert2-ok");
+      } else {
+        const { error } = await supabase
+          .from("inventory_items")
+          .insert({
+            inventory_id: currentInventoryId,
+            name,
+            name_norm,
+            unit,
+            qty: round(qty),
+            min_qty: round(minQty),
+            essential
+          });
+        if (error) return toast(error.message, "error", "ins");
+        toast("Adicionado ✅", "success", "ins-ok");
+      }
+
+      $("name").value = ""; $("qty").value = ""; $("min").value = "";
+      $("essential").checked = true;
+    }
+
+    async function updateQty(id, delta) {
+      const it = items.find(x => x.id === id);
+      if (!it) return;
+      const next = round(Math.max(0, Number(it.qty) + Number(delta)));
+      it.qty = next;
+      renderItems();
+
+      const { error } = await supabase
+        .from("inventory_items")
+        .update({ qty: next })
+        .eq("id", id)
+        .eq("inventory_id", currentInventoryId);
+
+      if (error) {
+        toast("Não salvou: " + error.message, "error", "qtyerr");
+        loadItems(currentInventoryId).catch(()=>{});
+      }
+    }
+
+    $("add").onclick = upsertItem;
+    $("search").addEventListener("input", renderItems);
 
     $("filterList").onclick = () => {
       showOnlyNeeds = !showOnlyNeeds;
       $("filterList").classList.toggle("active", showOnlyNeeds);
       $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
-      render();
+      renderItems();
     };
 
-    $("export").onclick = () => {
-      const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
+    $("export").onclick = async () => {
+      const text = items
+        .sort((a,b)=> (a.name||"").localeCompare((b.name||""), "pt-BR"))
+        .map(it => `${it.qty} ${it.unit} - ${it.name} (mín ${it.min_qty||0})${it.essential ? "" : " [não essencial]"}`)
+        .join("\n");
+
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "inventario.json";
+      a.download = "inventario.txt";
       a.click();
       URL.revokeObjectURL(url);
       toast("Exportado ✅", "success", "export");
@@ -883,243 +636,128 @@
       const inp = document.createElement("input");
       inp.type = "file";
       inp.accept = "application/json";
+
       inp.onchange = async () => {
         const file = inp.files?.[0];
         if (!file) return;
-        overlaySafe(true, "import");
         try {
           const text = await file.text();
           const data = JSON.parse(text);
-          if (!Array.isArray(data)) return toast("Arquivo inválido.", "error", "import-invalid");
-          if (!currentInventoryId) return;
+          if (!Array.isArray(data)) return toast("Arquivo inválido.", "error", "imp-bad");
+
+          status("Importando…", "warn", 1200);
 
           for (const it of data) {
-            const name = (it?.name || "").toString().trim();
-            if (!name) continue;
-            const unit = (it?.unit || "un").toString();
-            const qty = round(Number(it?.qty || 0));
-            const min_qty = round(Number(it?.min_qty || 0));
-            const n = norm(name);
-            const existing = items.find(x => x.name_norm === n && x.unit === unit);
+            if (!it?.name) continue;
+            const name = String(it.name);
+            const unit = it.unit || "un";
+            const qty = Number(it.qty || 0);
+            const min_qty = Number(it.min_qty || 0);
+            const essential = (it.essential ?? true) ? true : false;
+            const name_norm = norm(name);
 
-            if (existing) {
-              const patched = await updateItem(existing.id, { name, name_norm: n, unit, qty, min_qty });
-              upsertLocalItem(patched);
+            const { data: existing } = await supabase
+              .from("inventory_items")
+              .select("id")
+              .eq("inventory_id", currentInventoryId)
+              .eq("name_norm", name_norm)
+              .eq("unit", unit)
+              .maybeSingle();
+
+            if (existing?.id) {
+              await supabase.from("inventory_items")
+                .update({ name, qty: round(qty), min_qty: round(min_qty), essential })
+                .eq("id", existing.id);
             } else {
-              const inserted = await insertItem({ inventory_id: currentInventoryId, name, name_norm: n, unit, qty, min_qty });
-              upsertLocalItem(inserted);
+              await supabase.from("inventory_items").insert({
+                inventory_id: currentInventoryId,
+                name, name_norm, unit,
+                qty: round(qty),
+                min_qty: round(min_qty),
+                essential
+              });
             }
           }
-          toast("Importado ✅", "success", "import-ok");
+
+          toast("Importado ✅", "success", "imp-ok");
+          await loadItems(currentInventoryId);
         } catch (e) {
           console.error(e);
-          toast("Falha ao importar: " + (e?.message || e), "error", "import-fail");
-        } finally {
-          overlaySafe(false, "import");
+          toast("Falha ao importar: " + (e?.message || e), "error", "imp-fail");
         }
       };
+
       inp.click();
     };
 
-    $("clear").onclick = async () => {
-      if (!confirm("Tem certeza que quer zerar tudo?")) return;
-      overlaySafe(true, "clear");
-      try {
-        if (!currentInventoryId) return;
-        for (const id of items.map(x => x.id)) await deleteItem(id);
-        items = [];
-        saveLocal(currentInventoryId, items);
-        render();
-        toast("Zerado ✅", "success", "clear-ok");
-      } catch (e) {
-        console.error(e);
-        toast("Falha ao zerar: " + (e?.message || e), "error", "clear-fail");
-      } finally {
-        overlaySafe(false, "clear");
-      }
-    };
-
-    // ===== Edit =====
-    function startEdit(id) {
-      const it = items.find(x => x.id === id);
-      if (!it) return;
-      editingId = id;
-      $("name").value = it.name || "";
-      $("unit").value = it.unit || "un";
-      $("qty").value = it.qty ?? 0;
-      $("min").value = it.min_qty ?? 0;
-      $("add").textContent = "Salvar";
-      $("cancelEdit").classList.remove("hidden");
-      toast("Editando item…", "warn", "editing");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-    function cancelEdit() {
-      editingId = null;
-      $("name").value = "";
-      $("qty").value = "";
-      $("min").value = "";
-      $("confirmBuy").checked = false;
-      $("add").textContent = "Adicionar";
-      $("cancelEdit").classList.add("hidden");
-    }
-
-    async function addOrUpdateItem() {
-      if (!currentInventoryId) return;
-      const name = $("name").value.trim();
-      const unit = $("unit").value;
-      const qty = round(Number($("qty").value || 0));
-      const minQty = round(Number($("min").value || 0));
-      const confirmBuy = $("confirmBuy").checked;
-      if (!name) return toast("Informe o nome do item.", "warn", "need-name");
-      const n = norm(name);
-
-      try {
-        overlaySafe(true, "save-item");
-        if (editingId) {
-          const old = items.find(x => x.id === editingId);
-          const patch = { name, name_norm: n, unit, qty, min_qty: minQty, updated_at: new Date().toISOString() };
-          if (confirmBuy) {
-            patch.last_buy_at = new Date().toISOString();
-            const oldQty = Number(old?.qty ?? 0);
-            const delta = round(qty - oldQty);
-            patch.last_buy_qty = delta > 0 ? delta : qty;
-          }
-          const updated = await updateItem(editingId, patch);
-          upsertLocalItem(updated);
-          toast("Salvo ✅", "success", "saved-edit");
-          cancelEdit();
-          return;
-        }
-
-        const existing = items.find(x => x.name_norm === n && x.unit === unit);
-        if (existing) {
-          const newQty = round(Number(existing.qty || 0) + qty);
-          const patch = { qty: newQty, min_qty: (minQty || minQty === 0) ? minQty : (existing.min_qty || 0), updated_at: new Date().toISOString() };
-          if (confirmBuy) { patch.last_buy_at = new Date().toISOString(); patch.last_buy_qty = qty; }
-          const updated = await updateItem(existing.id, patch);
-          upsertLocalItem(updated);
-          toast("Atualizado ✅", "success", "saved-merge");
-        } else {
-          const row = { inventory_id: currentInventoryId, name, name_norm: n, unit, qty, min_qty: minQty };
-          if (confirmBuy) { row.last_buy_at = new Date().toISOString(); row.last_buy_qty = qty; }
-          const inserted = await insertItem(row);
-          upsertLocalItem(inserted);
-          toast("Adicionado ✅", "success", "saved-new");
-        }
-
-        $("name").value = ""; $("qty").value = ""; $("min").value = ""; $("confirmBuy").checked = false;
-        render();
-      } catch (e) {
-        console.error(e);
-        toast("Falha ao salvar: " + (e?.message || e), "error", "save-fail");
-      } finally {
-        overlaySafe(false, "save-item");
-      }
-    }
-
-    async function updateQty(id, delta) {
-      const it = items.find(x => x.id === id);
-      if (!it) return;
-      const oldQty = Number(it.qty ?? 0);
-      const newQty = round(Math.max(0, oldQty + Number(delta)));
-
-      try {
-        it.qty = newQty;
-        saveLocal(currentInventoryId, items);
-        render();
-
-        const patch = { qty: newQty, updated_at: new Date().toISOString() };
-        if (newQty === 0 && oldQty > 0) { patch.last_zero_at = new Date().toISOString(); patch.last_zero_qty = 0; }
-        const updated = await runTask("Salvar", () => updateItem(id, patch), { showOverlay: false, timeoutMs: 15000 });
-        if (updated) upsertLocalItem(updated);
-      } catch (e) {
-        console.error(e);
-        toast("Não salvou no cloud. Tentando depois.", "warn", "save-offline");
-        setNet("offline");
-      }
-    }
-
-    async function removeItem(id) {
-      if (!confirm("Remover item?")) return;
-      try {
-        overlaySafe(true, "delete");
-        items = items.filter(x => x.id !== id);
-        saveLocal(currentInventoryId, items);
-        render();
-        await deleteItem(id);
-        toast("Removido ✅", "success", "deleted");
-      } catch (e) {
-        console.error(e);
-        toast("Falha ao remover: " + (e?.message || e), "error", "del-fail");
-      } finally {
-        overlaySafe(false, "delete");
-      }
-    }
-
-    // ===== visibility =====
     document.addEventListener("visibilitychange", async () => {
-      if (!currentInventoryId) return;
-      if (document.hidden) await stopRealtime();
-      else {
-        setNet(navigator.onLine ? "sync" : "offline");
-        const cloudItems = await runTask("Sincronizar", () => fetchItems(currentInventoryId), { showOverlay: false, timeoutMs: 20000 });
-        if (Array.isArray(cloudItems)) {
-          items = cloudItems.map(x => ({ ...x, name_norm: x.name_norm || norm(x.name) }));
-          saveLocal(currentInventoryId, items);
-          render();
-          setNet("online");
-        }
-        await startRealtime(currentInventoryId);
-        touchLastSeen();
-        if (membersOpen) refreshMembers();
-      }
+      if (document.hidden) return;
+      try {
+        const u = await getSessionUser();
+        if (!u || !currentInventoryId) return;
+        await subscribeRealtime(currentInventoryId);
+        loadMembers(currentInventoryId).catch(()=>{});
+        loadItems(currentInventoryId).catch(()=>{});
+        supabase.rpc("touch_presence").catch(()=>{});
+      } catch {}
     });
 
-    window.addEventListener("online", () => setNet("sync"));
-    window.addEventListener("offline", () => setNet("offline"));
-
-    // ===== auth =====
-    let booting = false;
     supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (booting) return;
-      if (!session?.user) {
-        overlaySafe(false, "authStateChange");
-        await stopRealtime();
-        showLogin();
-        return;
-      }
-      booting = true;
+      if (!session?.user) { showLogin(); return; }
+
       try {
-        const did = await finalizePendingSetupIfNeeded(session.user);
-        if (!did) await bootFromProfile(session.user.id);
+        const { data: prof, error } = await supabase
+          .from("profiles")
+          .select("current_inventory_id")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        if (error) throw error;
+
+        const invId = prof?.current_inventory_id;
+        if (invId) await boot(invId);
+        else { showRegister(); toast("Logado. Vincule um inventário ou gere um novo.", "warn", "needlink"); }
       } catch (e) {
         console.error(e);
+        toast("Falha ao iniciar: " + (e?.message || e), "error", "boot");
         showLogin();
-        if (!isAbortError(e)) toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
-      } finally {
-        booting = false;
-        overlaySafe(false, "authStateChange");
       }
     });
 
-    // ===== first paint =====
     (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) { showLogin(); setNet(navigator.onLine ? "sync" : "offline"); return; }
-        setNet(navigator.onLine ? "sync" : "offline");
-        overlaySafe(true, "first-paint");
-        const did = await finalizePendingSetupIfNeeded(session.user);
-        if (!did) await bootFromProfile(session.user.id);
-      } catch (e) {
-        console.error(e);
-        showLogin();
-        if (!isAbortError(e)) toast("Falha ao iniciar: " + (e?.message || e), "error", "init-fail");
-      } finally {
-        overlaySafe(false, "first-paint");
-      }
+      const u = await getSessionUser();
+      if (!u) showLogin();
     })();
-
   </script>
+
+  <style>
+    .status-bar{
+      position: sticky;
+      top: 0;
+      z-index: 3000;
+      padding: 10px 12px;
+      font-weight: 800;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(11,18,32,.14);
+      background: #fff;
+    }
+    .status-bar.hidden{ display:none; }
+    .status-bar.warn{ background: rgba(245,158,11,.10); }
+    .status-bar.error{ background: rgba(239,68,68,.10); }
+    .status-bar.success{ background: rgba(34,197,94,.10); }
+
+    .members-list{
+      margin-top: 10px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .member{
+      border: 1px solid rgba(11,18,32,.14);
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: #fff;
+      min-width: 160px;
+    }
+  </style>
 </body>
 </html>
