@@ -63,7 +63,7 @@
         </div>
 
         <div class="muted">
-          Dica: Se marcar “Gerar inventário”, você vira dono e ganha um código pra compartilhar com sua família.
+          Se marcar “Gerar inventário”, você vira dono e ganha um código pra compartilhar.
         </div>
       </div>
     </div>
@@ -84,7 +84,7 @@
 
       <div class="divider"></div>
 
-      <!-- ===== MEMBERS (SIMPLES) ===== -->
+      <!-- MEMBERS -->
       <div id="membersBox">
         <div class="row header-row" style="align-items:flex-end;">
           <div>
@@ -93,7 +93,6 @@
           </div>
           <div class="pill" id="myRolePill" title="Seu cargo">—</div>
         </div>
-
         <div id="membersList" class="list" style="margin-top:10px;"></div>
       </div>
 
@@ -147,6 +146,7 @@
     </div>
   </div>
 
+  <!-- Footer -->
   <footer id="footer" class="footer"></footer>
 
   <script type="module">
@@ -158,14 +158,10 @@
     const APP_URL = "https://dihegoof.github.io/manager/";
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      }
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
-    // ========= SAFE READY =========
+    // ========= READY =========
     const ready = (fn) => (document.readyState === "loading"
       ? document.addEventListener("DOMContentLoaded", fn, { once: true })
       : fn());
@@ -207,7 +203,6 @@
       // ========= TOAST =========
       const lastToastAt = new Map();
       function normalizeToastType(type) {
-        // seu CSS tem success / error / warn (e talvez warning/info)
         if (type === "success" || type === "error" || type === "warn") return type;
         return "warn";
       }
@@ -238,7 +233,7 @@
         setTimeout(() => wrap.remove(), 3800);
       }
 
-      // ========= OVERLAY (NO INFINITE) =========
+      // ========= OVERLAY (failsafe) =========
       function overlay(on) { $("overlay").classList.toggle("on", !!on); }
       let overlayTimer = null;
       function overlaySafe(on, reason = "") {
@@ -256,9 +251,7 @@
       function withTimeout(promise, ms, label = "operação") {
         return Promise.race([
           promise,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`${label}: timeout (${ms}ms)`)), ms)
-          )
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`${label}: timeout (${ms}ms)`)), ms))
         ]);
       }
 
@@ -282,7 +275,6 @@
         $("appView").classList.add("hidden");
         $("authView").classList.add("fade-in");
       }
-
       function showRegister() {
         $("authTitle").textContent = "Registrar";
         $("loginForm").classList.add("hidden");
@@ -292,13 +284,11 @@
         syncRegisterUI();
         $("authView").classList.add("fade-in");
       }
-
       function showApp() {
         $("authView").classList.add("hidden");
         $("appView").classList.remove("hidden");
         $("appView").classList.add("fade-in");
       }
-
       function syncRegisterUI() {
         const gen = $("genInv").checked;
         $("invCode").disabled = gen;
@@ -320,8 +310,8 @@
 
       let editItemId = null;
 
-      // pending registration setup (para casos de confirm email ON)
-      const PENDING_KEY = "pending_inv_setup_v3";
+      // pending setup (caso confirm email ON)
+      const PENDING_KEY = "pending_inv_setup_v4";
       const setPending = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
       const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
       const clearPending = () => localStorage.removeItem(PENDING_KEY);
@@ -330,6 +320,30 @@
         const qty = Number(it.qty ?? 0);
         const min = Number(it.min_qty ?? 0);
         return qty <= 0 || (min > 0 && qty <= min);
+      }
+
+      function showInfo(it) {
+        const d = diffDays(it.last_buy_at, it.last_zero_at);
+        const dur = (d == null) ? "—" : `${d} dia(s)`;
+
+        const txt =
+`📦 ${it.name}
+
+🛒 Última compra:
+- data: ${fmtDate(it.last_buy_at)}
+- qtd:  ${it.last_buy_qty ?? "—"}
+
+🛒 Compra anterior:
+- data: ${fmtDate(it.prev_buy_at)}
+- qtd:  ${it.prev_buy_qty ?? "—"}
+
+🧯 Último zerado:
+- data: ${fmtDate(it.last_zero_at)}
+
+⏱️ Duração (última compra → último zerado):
+- ${dur}
+`;
+        alert(txt);
       }
 
       // ========= RENDER MEMBERS =========
@@ -442,30 +456,6 @@
         }
       }
 
-      function showInfo(it) {
-        const d = diffDays(it.last_buy_at, it.last_zero_at);
-        const dur = (d == null) ? "—" : `${d} dia(s)`;
-
-        const txt =
-`📦 ${it.name}
-
-🛒 Última compra:
-- data: ${fmtDate(it.last_buy_at)}
-- qtd:  ${it.last_buy_qty ?? "—"}
-
-🛒 Compra anterior:
-- data: ${fmtDate(it.prev_buy_at)}
-- qtd:  ${it.prev_buy_qty ?? "—"}
-
-🧯 Último zerado:
-- data: ${fmtDate(it.last_zero_at)}
-
-⏱️ Duração (última compra → último zerado):
-- ${dur}
-`;
-        alert(txt);
-      }
-
       // ========= AUTH / BOOT =========
       async function getSession() {
         const { data: { session } } = await supabase.auth.getSession();
@@ -473,7 +463,6 @@
       }
 
       async function ensureProfileRow(displayName = "Usuário") {
-        // garante que profile existe (RLS permite insert own)
         const { error } = await withTimeout(
           supabase.from("profiles").upsert({ user_id: currentUser.id, display_name: displayName }),
           8000,
@@ -516,7 +505,6 @@
           }
 
           clearPending();
-
           if (!invId) throw new Error("Não consegui obter o inventário.");
           await bootInventory(invId);
           return true;
@@ -524,38 +512,9 @@
         } catch (e) {
           console.error(e);
           clearPending();
-          toast("Falhou ao finalizar vínculo/criação: " + (e?.message || e), "error", "finalize-fail");
-          showRegister();
+          toast("Falha ao finalizar vínculo/criação: " + (e?.message || e), "error", "finalize-fail");
           return true;
         }
-      }
-
-      async function bootFromProfile() {
-        if (!currentUser) return;
-
-        // 1) se tinha pending (cadastro), finaliza primeiro
-        const did = await finalizePendingIfAny();
-        if (did) return;
-
-        // 2) busca o current_inventory_id
-        const { data: prof, error } = await withTimeout(
-          supabase.from("profiles")
-            .select("current_inventory_id, display_name")
-            .eq("user_id", currentUser.id)
-            .maybeSingle(),
-          8000,
-          "load profile"
-        );
-
-        if (error) throw error;
-
-        if (!prof?.current_inventory_id) {
-          showRegister();
-          toast("Você está logado. Gere um inventário ou informe um código.", "warn", "need-inv");
-          return;
-        }
-
-        await bootInventory(prof.current_inventory_id);
       }
 
       async function loadInventoryMeta(invId) {
@@ -601,12 +560,8 @@
       }
 
       async function stopRealtime() {
-        try {
-          if (realtimeItems) await supabase.removeChannel(realtimeItems);
-        } catch {}
-        try {
-          if (realtimeMembers) await supabase.removeChannel(realtimeMembers);
-        } catch {}
+        try { if (realtimeItems) await supabase.removeChannel(realtimeItems); } catch {}
+        try { if (realtimeMembers) await supabase.removeChannel(realtimeMembers); } catch {}
         realtimeItems = null;
         realtimeMembers = null;
       }
@@ -622,7 +577,6 @@
             table: "inventory_items",
             filter: `inventory_id=eq.${invId}`,
           }, (payload) => {
-            // Realtime confiável: refaz estado local sem “brigar” entre sessões
             const ev = payload.eventType;
             if (ev === "INSERT") {
               items = [payload.new, ...items.filter(x => x.id !== payload.new.id)];
@@ -661,17 +615,12 @@
 
       async function bootInventory(invId) {
         currentInventoryId = invId;
-
         showApp();
 
-        // Carrega meta + itens + membros (sem overlay infinito)
         overlaySafe(true, "boot");
         try {
           await loadInventoryMeta(invId);
-          await Promise.all([
-            loadItems(invId),
-            loadMembers(invId),
-          ]);
+          await Promise.all([ loadItems(invId), loadMembers(invId) ]);
           await startRealtime(invId);
           toast("Sincronizado ✅", "success", "synced");
         } finally {
@@ -679,30 +628,103 @@
         }
       }
 
-      // ========= LAST SEEN (membros) =========
+      // ✅ BOOT DEFINITIVO (se tiver inv -> entra; se não -> cria; se perdeu acesso -> admin)
+      async function bootFromProfile() {
+        if (!currentUser) return;
+
+        // 1) tenta finalizar pending (se houver)
+        const did = await finalizePendingIfAny();
+        if (did) return;
+
+        // 2) profile
+        const { data: prof, error } = await withTimeout(
+          supabase.from("profiles")
+            .select("current_inventory_id, display_name")
+            .eq("user_id", currentUser.id)
+            .maybeSingle(),
+          8000,
+          "load profile"
+        );
+        if (error) throw error;
+
+        const displayName = prof?.display_name || "Usuário";
+        const invId = prof?.current_inventory_id || null;
+
+        // 3) sem inventário -> cria automaticamente
+        if (!invId) {
+          overlaySafe(true, "auto-create-inv");
+          try {
+            await ensureProfileRow(displayName);
+
+            const { data, error } = await withTimeout(
+              supabase.rpc("create_inventory_and_set_profile", {
+                p_name: "Inventário da Casa",
+                p_display_name: displayName,
+              }),
+              9000,
+              "RPC auto create"
+            );
+            if (error) throw error;
+
+            const newInvId = data?.[0]?.inventory_id || data?.inventory_id || data?.[0] || null;
+            if (!newInvId) throw new Error("Não consegui criar inventário.");
+
+            await bootInventory(newInvId);
+            toast("Inventário criado ✅", "success", "auto-inv-ok");
+            return;
+
+          } catch (e) {
+            console.error(e);
+            toast("Falha ao criar inventário: " + (e?.message || e), "error", "auto-inv-fail");
+            return;
+          } finally {
+            overlaySafe(false, "auto-create-inv");
+          }
+        }
+
+        // 4) tem inventário -> tenta abrir; se permission -> admin
+        try {
+          await bootInventory(invId);
+          return;
+        } catch (e) {
+          console.error(e);
+          const msg = (e?.message || "").toLowerCase();
+          const access =
+            msg.includes("permission") ||
+            msg.includes("denied") ||
+            msg.includes("row level") ||
+            msg.includes("not allowed");
+
+          if (access) {
+            toast("Você perdeu acesso a este inventário (removido/excluído). Fale com o admin.", "error", "lost-access");
+            return;
+          }
+          toast("Falha ao abrir inventário: " + (e?.message || e), "error", "boot-inv-fail");
+          return;
+        }
+      }
+
+      // ========= LAST SEEN =========
       let lastSeenPingAt = 0;
       async function pingLastSeen() {
         if (!currentUser || !currentInventoryId) return;
         const now = Date.now();
-        if (now - lastSeenPingAt < 60_000) return; // 1 min
+        if (now - lastSeenPingAt < 60_000) return;
         lastSeenPingAt = now;
 
-        // update só no membership (mais útil pro app)
         const { error } = await supabase
           .from("inventory_members")
           .update({ last_seen_at: new Date().toISOString() })
           .eq("inventory_id", currentInventoryId)
           .eq("user_id", currentUser.id);
 
-        // se falhar não quebra UX
         if (error) console.warn("last_seen update:", error.message);
       }
 
       setInterval(() => { pingLastSeen(); }, 60_000);
       window.addEventListener("focus", () => { pingLastSeen(); });
       document.addEventListener("visibilitychange", () => {
-        // ✅ não faz “loading” aqui, só pinga quando volta
-        if (!document.hidden) pingLastSeen();
+        if (!document.hidden) pingLastSeen(); // ✅ sem overlay aqui
       });
 
       // ========= ITEMS CRUD =========
@@ -795,7 +817,7 @@
 
         const newQty = round(Math.max(0, Number(it.qty || 0) + Number(delta)));
 
-        // otimista local
+        // otimista
         items = items.map(x => x.id === itemId ? { ...x, qty: newQty } : x);
         renderItems();
 
@@ -808,7 +830,6 @@
         if (error) {
           console.warn(error);
           toast("Não salvou no cloud: " + error.message, "error", "qty-fail");
-          // recarrega pra consistência
           try { await loadItems(currentInventoryId); } catch {}
         }
       }
@@ -849,7 +870,6 @@
             const data = JSON.parse(text);
             if (!Array.isArray(data)) return toast("Arquivo inválido.", "error", "import-invalid");
 
-            // Importa como INSERT em lote (convertendo pro schema novo)
             const rows = data.map(x => ({
               inventory_id: currentInventoryId,
               name: x.name || "",
@@ -928,6 +948,7 @@
           currentUser = data?.user || (await getSession())?.user || null;
           toast("Logado ✅", "success", "logged");
           await bootFromProfile();
+          pingLastSeen();
 
         } catch (e) {
           console.error(e);
@@ -949,7 +970,6 @@
         if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warn", "reg-pass");
         if (!gen && !code) return toast("Informe o código do inventário.", "warn", "reg-code");
 
-        // guarda pending (pra casos de confirm email ON)
         setPending({
           displayName,
           mode: gen ? "create" : "join",
@@ -973,7 +993,7 @@
             throw error;
           }
 
-          // Se confirm email estiver ON, não vem session
+          // confirm email ON: não vem session
           if (!data?.session?.user) {
             toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
             showLogin();
@@ -983,8 +1003,8 @@
           currentUser = data.session.user;
           toast("Conta criada ✅", "success", "signup-ok");
 
-          // finaliza criação/vínculo agora
           await finalizePendingIfAny();
+          pingLastSeen();
 
         } catch (e) {
           console.error(e);
@@ -1024,12 +1044,9 @@
       };
 
       $("add").onclick = () => upsertItem();
-      $("cancelEdit").onclick = () => { resetEdit(); };
-
+      $("cancelEdit").onclick = () => resetEdit();
       $("search").addEventListener("input", renderItems);
-      $("name").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") upsertItem();
-      });
+      $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") upsertItem(); });
 
       $("filterList").onclick = () => {
         showOnlyNeeds = !showOnlyNeeds;
@@ -1055,11 +1072,10 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ========= AUTH STATE (SEM BUG DE TROCAR ABA) =========
+      // ========= AUTH STATE (SEM “TROCA ABA = LOADING”) =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
-        // Não fica “forçando overlay” aqui -> evita bug de tab switch
         if (booting) return;
 
         if (!session?.user) {
@@ -1080,8 +1096,8 @@
           pingLastSeen();
         } catch (e) {
           console.error(e);
-          showRegister();
-          toast("Logado ✅ mas falhou ao iniciar: " + (e?.message || e), "warn", "boot-fail");
+          toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
+          // não joga pro register automaticamente
         } finally {
           booting = false;
         }
@@ -1102,7 +1118,7 @@
         }
       })();
 
-      // (opcional) avisa offline/online sem “cair da conta”
+      // Offline/Online (sem “cair da conta”)
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
     });
