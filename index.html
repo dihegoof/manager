@@ -346,6 +346,14 @@
         alert(txt);
       }
 
+      // ✅ garante texto do botão sempre correto (sem precisar refresh)
+      function syncEssentialBtn() {
+        $("filterEssentials").textContent =
+          essentialFilter === "both" ? "Essenciais: ambos" :
+          essentialFilter === "essential" ? "Essenciais: só essenciais" :
+          "Essenciais: só não essenciais";
+      }
+
       // ========= RENDER MEMBERS =========
       function renderMembers() {
         const host = $("membersList");
@@ -379,6 +387,36 @@
 
           row.appendChild(left);
           host.appendChild(row);
+        }
+      }
+
+      // ========= DELETE ITEM (novo) =========
+      async function deleteItem(it) {
+        if (!currentInventoryId) return;
+        const ok = confirm(`Remover "${it.name}"?`);
+        if (!ok) return;
+
+        overlaySafe(true, "delete-item");
+        try {
+          const { error } = await withTimeout(
+            supabase.from("inventory_items")
+              .delete()
+              .eq("id", it.id)
+              .eq("inventory_id", currentInventoryId),
+            9000,
+            "delete item"
+          );
+          if (error) throw error;
+
+          toast("Removido ✅", "success", "del-ok");
+          // realtime deve remover; mas garante local também
+          items = items.filter(x => x.id !== it.id);
+          renderItems();
+        } catch (e) {
+          console.error(e);
+          toast("Falha ao remover: " + (e?.message || e), "error", "del-fail");
+        } finally {
+          overlaySafe(false, "delete-item");
         }
       }
 
@@ -427,6 +465,18 @@
 
           const controls = document.createElement("div");
           controls.className = "controls";
+          // ajuda no mobile a não estourar (sem mexer no CSS)
+          controls.style.flexWrap = "wrap";
+          controls.style.justifyContent = "flex-end";
+
+          // ✅ ordem pedida: + <qtd> - ⚙️ ℹ️ 🗑️
+          const plus = document.createElement("button");
+          plus.textContent = "+";
+          plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
+
+          const qty = document.createElement("div");
+          qty.className = "qty pill";
+          qty.textContent = `${it.qty} ${it.unit}`;
 
           const minus = document.createElement("button");
           minus.textContent = "−";
@@ -445,19 +495,9 @@
           const del = document.createElement("button");
           del.textContent = "🗑️";
           del.title = "Excluir";
-          del.onclick = () => deleteItem(it.id, it.name);
+          del.onclick = () => deleteItem(it);
 
-          const qty = document.createElement("div");
-          qty.className = "qty pill";
-          qty.textContent = `${it.qty} ${it.unit}`;
-
-          const plus = document.createElement("button");
-          plus.textContent = "+";
-          plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
-
-          /* ordem pedida: + <quantia> - ⚙️ ℹ️ 🗑️ */
           controls.append(plus, qty, minus, edit, info, del);
-
           row.append(left, controls);
           list.appendChild(row);
         }
@@ -626,6 +666,7 @@
 
         overlaySafe(true, "boot");
         try {
+          syncEssentialBtn(); // ✅ garante aparecer certo sempre
           await loadInventoryMeta(invId);
           await Promise.all([ loadItems(invId), loadMembers(invId) ]);
           await startRealtime(invId);
@@ -639,11 +680,9 @@
       async function bootFromProfile() {
         if (!currentUser) return;
 
-        // 1) tenta finalizar pending (se houver)
         const did = await finalizePendingIfAny();
         if (did) return;
 
-        // 2) profile
         const { data: prof, error } = await withTimeout(
           supabase.from("profiles")
             .select("current_inventory_id, display_name")
@@ -657,7 +696,6 @@
         const displayName = prof?.display_name || "Usuário";
         const invId = prof?.current_inventory_id || null;
 
-        // 3) sem inventário -> cria automaticamente
         if (!invId) {
           overlaySafe(true, "auto-create-inv");
           try {
@@ -689,7 +727,6 @@
           }
         }
 
-        // 4) tem inventário -> tenta abrir; se permission -> admin
         try {
           await bootInventory(invId);
           return;
@@ -731,7 +768,7 @@
       setInterval(() => { pingLastSeen(); }, 60_000);
       window.addEventListener("focus", () => { pingLastSeen(); });
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) pingLastSeen(); // ✅ sem overlay aqui
+        if (!document.hidden) pingLastSeen();
       });
 
       // ========= ITEMS CRUD =========
@@ -838,34 +875,6 @@
           console.warn(error);
           toast("Não salvou no cloud: " + error.message, "error", "qty-fail");
           try { await loadItems(currentInventoryId); } catch {}
-        }
-      }
-
-      /* ===== EXCLUIR ITEM (adicionado) ===== */
-      async function deleteItem(itemId, itemName = "este item") {
-        if (!currentInventoryId) return;
-
-        const ok = confirm(`Excluir "${itemName}"? Isso não tem volta.`);
-        if (!ok) return;
-
-        // otimista
-        const backup = items;
-        items = items.filter(x => x.id !== itemId);
-        renderItems();
-
-        const { error } = await supabase
-          .from("inventory_items")
-          .delete()
-          .eq("id", itemId)
-          .eq("inventory_id", currentInventoryId);
-
-        if (error) {
-          // desfaz se falhar
-          items = backup;
-          renderItems();
-          toast("Falha ao excluir: " + error.message, "error", "del-fail");
-        } else {
-          toast("Excluído ✅", "success", "del-ok");
         }
       }
 
@@ -1028,7 +1037,6 @@
             throw error;
           }
 
-          // confirm email ON: não vem session
           if (!data?.session?.user) {
             toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
             showLogin();
@@ -1095,11 +1103,7 @@
         else if (essentialFilter === "essential") essentialFilter = "not";
         else essentialFilter = "both";
 
-        $("filterEssentials").textContent =
-          essentialFilter === "both" ? "Essenciais: ambos" :
-          essentialFilter === "essential" ? "Essenciais: só essenciais" :
-          "Essenciais: só não essenciais";
-
+        syncEssentialBtn();   // ✅ agora atualiza na hora sempre
         renderItems();
       };
 
@@ -1107,7 +1111,7 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ========= AUTH STATE (SEM “TROCA ABA = LOADING”) =========
+      // ========= AUTH STATE =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -1132,7 +1136,6 @@
         } catch (e) {
           console.error(e);
           toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
-          // não joga pro register automaticamente
         } finally {
           booting = false;
         }
@@ -1141,6 +1144,7 @@
       // ========= FIRST PAINT =========
       (async () => {
         try {
+          syncEssentialBtn(); // ✅ garante botão certo mesmo antes do login
           const session = await getSession();
           if (!session?.user) return showLogin();
 
@@ -1153,7 +1157,7 @@
         }
       })();
 
-      // Offline/Online (sem “cair da conta”)
+      // Offline/Online
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
     });
