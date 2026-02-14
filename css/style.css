@@ -25,42 +25,18 @@
 html{
   height: 100%;
   background: var(--bg);
-  overscroll-behavior-y: contain; /* ✅ melhor que none (evita glitches) */
+  overscroll-behavior-y: none; /* evita “puxar e sumir” em alguns Android */
 }
 
 body{
   margin:0;
-
-  /* ✅ troca 100% por viewport real (evita bug de scroll no Chrome Android) */
-  min-height: 100vh;
-  min-height: 100svh; /* browsers modernos */
+  min-height: 100%;
   display:flex;
   flex-direction: column;
-
-  /* ✅ deixa o body “limpo” e estável */
-  background: transparent;
+  background: radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
+              radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
+              var(--bg);
   color: var(--text);
-
-  /* ✅ necessário pra camada do fundo ficar atrás SEM bugar */
-  position: relative;
-  isolation: isolate;
-
-  overflow-x: hidden;
-}
-
-/* ✅ FUNDO FIXO (CORRIGE “sumir tudo quando scrolla”) */
-body::before{
-  content:"";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-
-  background:
-    radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
-    radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
-    var(--bg);
-
-  transform: translateZ(0); /* ajuda compositor do Chrome */
 }
 
 /* util */
@@ -148,12 +124,6 @@ button.ghost{
   background: rgba(255,255,255,.72);
   border-color: rgba(11,18,32,.12);
   box-shadow: none;
-}
-
-/* ✅ admin icon button */
-#adminBtn{
-  min-width: 44px;
-  padding: 9px 12px;
 }
 
 /* filtro ativo */
@@ -256,7 +226,7 @@ button.ghost{
 /* auth center */
 .center-screen{
   flex: 1;
-  min-height: calc(100svh - 60px);
+  min-height: calc(100vh - 60px);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -437,43 +407,31 @@ button.ghost{
   .qty{
     min-width: 72px;
   }
+}
 
-/* ===== FIX DEFINITIVO: não usar scroll no body (Chrome Android/Xiaomi) ===== */
+/* ===========================================================
+   FIX DEFINITIVO (Xiaomi/Chrome): body NÃO rola, rola só app/auth
+   =========================================================== */
+
 html, body{
   height: 100%;
 }
 
+/* trava o viewport (não existe scroll do documento) */
 body{
-  /* o documento não rola mais */
+  position: fixed;
+  inset: 0;
   overflow: hidden;
-
-  /* viewport estável */
-  min-height: 100vh;
-  min-height: 100svh;
+  width: 100%;
 }
 
-/* deixa o container do app rolar */
+/* auth e app viram “telas” que rolam internamente */
+#authView,
 #appView{
-  flex: 1 1 auto;
-  min-height: 0;                  /* MUITO importante em layout flex */
-  height: 100svh;
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-}
-
-/* e o auth também (pra telas pequenas) */
-#authView{
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100svh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
-}
-
-/* footer continua no layout, mas não “puxa” o scroll */
-.footer{
-  flex: 0 0 auto;
-}
+  min-height: 100%;
 }
