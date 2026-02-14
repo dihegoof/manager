@@ -248,25 +248,11 @@
         }
       }
 
-      // ======= TIMEOUT + ERRO SUPABASE (NOVO) =======
       function withTimeout(promise, ms, label = "operação") {
         return Promise.race([
           promise,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(Object.assign(new Error(`${label}: timeout (${ms}ms)`), { _timeout: true })), ms)
-          )
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`${label}: timeout (${ms}ms)`)), ms))
         ]);
-      }
-
-      function supaErrMsg(err) {
-        if (!err) return "erro desconhecido";
-        const parts = [];
-        if (err.code) parts.push(`code=${err.code}`);
-        if (err.status) parts.push(`status=${err.status}`);
-        if (err.message) parts.push(err.message);
-        if (err.details) parts.push(err.details);
-        if (err.hint) parts.push(err.hint);
-        return parts.join(" • ");
       }
 
       window.addEventListener("unhandledrejection", (e) => {
@@ -456,6 +442,11 @@
           info.title = "Info / histórico";
           info.onclick = () => showInfo(it);
 
+          const del = document.createElement("button");
+          del.textContent = "🗑️";
+          del.title = "Excluir";
+          del.onclick = () => deleteItem(it.id, it.name);
+
           const qty = document.createElement("div");
           qty.className = "qty pill";
           qty.textContent = `${it.qty} ${it.unit}`;
@@ -464,7 +455,7 @@
           plus.textContent = "+";
           plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
 
-          controls.append(minus, edit, info, qty, plus);
+          controls.append(minus, edit, info, del, qty, plus);
           row.append(left, controls);
           list.appendChild(row);
         }
@@ -601,7 +592,12 @@
             }
             renderItems();
           })
-          .subscribe();
+          .subscribe((status) => {
+            console.log("[realtime items]", status);
+            if (status === "SUBSCRIBED") toast("Tempo real ativo ✅", "success", "rt-items-ok");
+            if (status === "CHANNEL_ERROR") toast("Falha no tempo real (itens).", "warn", "rt-items-err");
+            if (status === "TIMED_OUT") toast("Tempo real demorou pra conectar (itens).", "warn", "rt-items-timeout");
+          });
 
         realtimeMembers = supabase
           .channel("rt-members-" + invId)
@@ -624,7 +620,10 @@
             const me = members.find(m => m.user_id === currentUser.id);
             $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
           })
-          .subscribe();
+          .subscribe((status) => {
+            console.log("[realtime members]", status);
+            if (status === "CHANNEL_ERROR") toast("Falha no tempo real (membros).", "warn", "rt-mem-err");
+          });
       }
 
       async function bootInventory(invId) {
@@ -787,49 +786,40 @@
         overlaySafe(true, "upsert-item");
         try {
           if (editItemId) {
-            const { error } = await withTimeout(
+            const { data, error } = await withTimeout(
               supabase.from("inventory_items")
                 .update(payload)
                 .eq("id", editItemId)
-                .eq("inventory_id", currentInventoryId),
+                .eq("inventory_id", currentInventoryId)
+                .select("*")
+                .single(),
               8000,
               "update item"
             );
             if (error) throw error;
+
+            // ✅ atualiza local imediatamente (sem depender do realtime)
+            items = items.map(x => x.id === data.id ? data : x);
+            renderItems();
 
             toast("Atualizado ✅", "success", "item-upd");
             resetEdit();
           } else {
             payload.created_by = currentUser.id;
 
-            // ===== INSERT com retry e retorno do row (NOVO) =====
-            let res;
-            try {
-              res = await withTimeout(
-                supabase.from("inventory_items").insert(payload).select("*").single(),
-                12000,
-                "insert item"
-              );
-            } catch (e) {
-              if (e?._timeout) {
-                toast("Internet lenta… tentando de novo", "warn", "insert-retry");
-                res = await withTimeout(
-                  supabase.from("inventory_items").insert(payload).select("*").single(),
-                  25000,
-                  "insert item (retry)"
-                );
-              } else {
-                throw e;
-              }
-            }
+            const { data, error } = await withTimeout(
+              supabase.from("inventory_items")
+                .insert(payload)
+                .select("*")
+                .single(),
+              8000,
+              "insert item"
+            );
+            if (error) throw error;
 
-            if (res?.error) throw res.error;
-
-            // ✅ otimista: já adiciona local (não depende do realtime)
-            if (res?.data) {
-              items = [res.data, ...items.filter(x => x.id !== res.data.id)];
-              renderItems();
-            }
+            // ✅ insere local imediatamente (sem refresh)
+            items = [data, ...items.filter(x => x.id !== data.id)];
+            renderItems();
 
             toast("Adicionado ✅", "success", "item-add");
           }
@@ -841,9 +831,7 @@
 
         } catch (e) {
           console.error(e);
-          const msg = e?.message || e;
-          const supa = (e?.code || e?.status || e?.details || e?.hint) ? supaErrMsg(e) : msg;
-          toast("Falha ao salvar: " + supa, "error", "save-fail");
+          toast("Falha ao salvar: " + (e?.message || e), "error", "save-fail");
         } finally {
           overlaySafe(false, "upsert-item");
         }
@@ -859,16 +847,60 @@
         items = items.map(x => x.id === itemId ? { ...x, qty: newQty } : x);
         renderItems();
 
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("inventory_items")
           .update({ qty: newQty })
           .eq("id", itemId)
-          .eq("inventory_id", currentInventoryId);
+          .eq("inventory_id", currentInventoryId)
+          .select("*")
+          .single();
 
         if (error) {
           console.warn(error);
           toast("Não salvou no cloud: " + error.message, "error", "qty-fail");
           try { await loadItems(currentInventoryId); } catch {}
+          return;
+        }
+
+        // garante consistência local
+        if (data) {
+          items = items.map(x => x.id === data.id ? data : x);
+          renderItems();
+        }
+      }
+
+      async function deleteItem(itemId, name = "") {
+        if (!currentInventoryId) return;
+
+        const label = name ? `“${name}”` : "este item";
+        if (!confirm(`Excluir ${label}?`)) return;
+
+        // otimista
+        const prev = items.slice();
+        items = items.filter(x => x.id !== itemId);
+        renderItems();
+
+        overlaySafe(true, "delete");
+        try {
+          const { error } = await withTimeout(
+            supabase.from("inventory_items")
+              .delete()
+              .eq("id", itemId)
+              .eq("inventory_id", currentInventoryId),
+            8000,
+            "delete item"
+          );
+          if (error) throw error;
+
+          toast("Excluído ✅", "success", "item-del");
+        } catch (e) {
+          console.error(e);
+          items = prev;
+          renderItems();
+          toast("Falha ao excluir: " + (e?.message || e), "error", "del-fail");
+          try { await loadItems(currentInventoryId); } catch {}
+        } finally {
+          overlaySafe(false, "delete");
         }
       }
 
@@ -1135,7 +1167,6 @@
         } catch (e) {
           console.error(e);
           toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
-          // não joga pro register automaticamente
         } finally {
           booting = false;
         }
