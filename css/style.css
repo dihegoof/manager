@@ -25,18 +25,42 @@
 html{
   height: 100%;
   background: var(--bg);
-  overscroll-behavior-y: none; /* evita “puxar e sumir” em alguns Android */
+  overscroll-behavior-y: contain; /* ✅ melhor que none (evita glitches) */
 }
 
 body{
   margin:0;
-  min-height: 100%;
+
+  /* ✅ troca 100% por viewport real (evita bug de scroll no Chrome Android) */
+  min-height: 100vh;
+  min-height: 100svh; /* browsers modernos */
   display:flex;
   flex-direction: column;
-  background: radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
-              radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
-              var(--bg);
+
+  /* ✅ deixa o body “limpo” e estável */
+  background: transparent;
   color: var(--text);
+
+  /* ✅ necessário pra camada do fundo ficar atrás SEM bugar */
+  position: relative;
+  isolation: isolate;
+
+  overflow-x: hidden;
+}
+
+/* ✅ FUNDO FIXO (CORRIGE “sumir tudo quando scrolla”) */
+body::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+
+  background:
+    radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
+    radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
+    var(--bg);
+
+  transform: translateZ(0); /* ajuda compositor do Chrome */
 }
 
 /* util */
@@ -232,7 +256,7 @@ button.ghost{
 /* auth center */
 .center-screen{
   flex: 1;
-  min-height: calc(100vh - 60px);
+  min-height: calc(100svh - 60px);
   display:flex;
   align-items:center;
   justify-content:center;
