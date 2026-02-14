@@ -70,7 +70,7 @@
   </div>
 
   <!-- ===== APP ===== -->
-  <div id="appView" class="wrap app-scroll hidden">
+  <div id="appView" class="wrap hidden">
     <div class="card">
       <div class="row header-row">
         <h1 class="title">Inventário da Casa</h1>
@@ -169,6 +169,36 @@
     ready(() => {
       // ========= HELPERS =========
       const $ = (id) => document.getElementById(id);
+
+      // ✅ marca containers pra CSS fix (não muda layout)
+      $("appView")?.classList.add("app-scroll");
+      $("authView")?.classList.add("auth-scroll");
+
+      // ✅ FIX: bloqueia “puxar pra baixo” no topo (Xiaomi/Chrome) sem travar o scroll normal
+      function blockPullToRefresh(el) {
+        if (!el) return;
+
+        let startY = 0;
+
+        el.addEventListener("touchstart", (e) => {
+          if (!e.touches || !e.touches.length) return;
+          startY = e.touches[0].clientY;
+        }, { passive: true });
+
+        el.addEventListener("touchmove", (e) => {
+          if (!e.touches || !e.touches.length) return;
+          const y = e.touches[0].clientY;
+          const dy = y - startY;
+
+          // se estiver no topo e puxou pra baixo -> bloqueia o gesto que buga repaint
+          if (el.scrollTop <= 0 && dy > 0) {
+            e.preventDefault();
+          }
+        }, { passive: false });
+      }
+
+      blockPullToRefresh($("appView"));
+      blockPullToRefresh($("authView"));
 
       const norm = (s) => (s || "")
         .toString()
@@ -641,15 +671,12 @@
         }
       }
 
-      // ✅ BOOT DEFINITIVO (se tiver inv -> entra; se não -> cria; se perdeu acesso -> admin)
       async function bootFromProfile() {
         if (!currentUser) return;
 
-        // 1) tenta finalizar pending (se houver)
         const did = await finalizePendingIfAny();
         if (did) return;
 
-        // 2) profile
         const { data: prof, error } = await withTimeout(
           supabase.from("profiles")
             .select("current_inventory_id, display_name")
@@ -663,7 +690,6 @@
         const displayName = prof?.display_name || "Usuário";
         const invId = prof?.current_inventory_id || null;
 
-        // 3) sem inventário -> cria automaticamente
         if (!invId) {
           overlaySafe(true, "auto-create-inv");
           try {
@@ -695,7 +721,6 @@
           }
         }
 
-        // 4) tem inventário -> tenta abrir; se permission -> admin
         try {
           await bootInventory(invId);
           return;
@@ -737,7 +762,7 @@
       setInterval(() => { pingLastSeen(); }, 60_000);
       window.addEventListener("focus", () => { pingLastSeen(); });
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) pingLastSeen(); // ✅ sem overlay aqui
+        if (!document.hidden) pingLastSeen();
       });
 
       // ========= ITEMS CRUD =========
@@ -798,7 +823,6 @@
             );
             if (error) throw error;
 
-            // ✅ atualiza local imediatamente (sem depender do realtime)
             items = items.map(x => x.id === data.id ? data : x);
             renderItems();
 
@@ -817,7 +841,6 @@
             );
             if (error) throw error;
 
-            // ✅ insere local imediatamente (sem refresh)
             items = [data, ...items.filter(x => x.id !== data.id)];
             renderItems();
 
@@ -843,7 +866,6 @@
 
         const newQty = round(Math.max(0, Number(it.qty || 0) + Number(delta)));
 
-        // otimista
         items = items.map(x => x.id === itemId ? { ...x, qty: newQty } : x);
         renderItems();
 
@@ -862,7 +884,6 @@
           return;
         }
 
-        // garante consistência local
         if (data) {
           items = items.map(x => x.id === data.id ? data : x);
           renderItems();
@@ -875,7 +896,6 @@
         const label = name ? `“${name}”` : "este item";
         if (!confirm(`Excluir ${label}?`)) return;
 
-        // otimista
         const prev = items.slice();
         items = items.filter(x => x.id !== itemId);
         renderItems();
@@ -1063,7 +1083,6 @@
             throw error;
           }
 
-          // confirm email ON: não vem session
           if (!data?.session?.user) {
             toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
             showLogin();
@@ -1142,7 +1161,7 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ========= AUTH STATE (SEM “TROCA ABA = LOADING”) =========
+      // ========= AUTH STATE =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -1187,7 +1206,6 @@
         }
       })();
 
-      // Offline/Online (sem “cair da conta”)
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
     });
