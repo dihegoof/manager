@@ -248,11 +248,25 @@
         }
       }
 
+      // ======= TIMEOUT + ERRO SUPABASE (NOVO) =======
       function withTimeout(promise, ms, label = "operação") {
         return Promise.race([
           promise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error(`${label}: timeout (${ms}ms)`)), ms))
+          new Promise((_, reject) =>
+            setTimeout(() => reject(Object.assign(new Error(`${label}: timeout (${ms}ms)`), { _timeout: true })), ms)
+          )
         ]);
+      }
+
+      function supaErrMsg(err) {
+        if (!err) return "erro desconhecido";
+        const parts = [];
+        if (err.code) parts.push(`code=${err.code}`);
+        if (err.status) parts.push(`status=${err.status}`);
+        if (err.message) parts.push(err.message);
+        if (err.details) parts.push(err.details);
+        if (err.hint) parts.push(err.hint);
+        return parts.join(" • ");
       }
 
       window.addEventListener("unhandledrejection", (e) => {
@@ -632,51 +646,20 @@
       async function bootFromProfile() {
         if (!currentUser) return;
 
-        // garante sessão antes de consultar (evita corrida auth.uid null)
-        const sess = await getSession();
-        if (!sess?.user) return;
-        currentUser = sess.user;
-
         // 1) tenta finalizar pending (se houver)
         const did = await finalizePendingIfAny();
         if (did) return;
 
-        // 2) profile (COM RETRY + UPSERT SE FALHAR)
-        let prof = null;
-        try {
-          const { data, error } = await withTimeout(
-            supabase.from("profiles")
-              .select("current_inventory_id, display_name")
-              .eq("user_id", currentUser.id)
-              .maybeSingle(),
-            8000,
-            "load profile"
-          );
-          if (error) throw error;
-          prof = data || null;
-
-        } catch (e) {
-          console.warn("load profile failed:", e?.message || e);
-
-          try {
-            await ensureProfileRow("Usuário");
-            const { data, error } = await withTimeout(
-              supabase.from("profiles")
-                .select("current_inventory_id, display_name")
-                .eq("user_id", currentUser.id)
-                .maybeSingle(),
-              8000,
-              "load profile retry"
-            );
-            if (error) throw error;
-            prof = data || null;
-          } catch (e2) {
-            console.error("profile retry failed:", e2?.message || e2);
-            toast("Falha ao carregar perfil. Verifique o banco/policies.", "error", "profile-hard-fail");
-            showLogin();
-            return;
-          }
-        }
+        // 2) profile
+        const { data: prof, error } = await withTimeout(
+          supabase.from("profiles")
+            .select("current_inventory_id, display_name")
+            .eq("user_id", currentUser.id)
+            .maybeSingle(),
+          8000,
+          "load profile"
+        );
+        if (error) throw error;
 
         const displayName = prof?.display_name || "Usuário";
         const invId = prof?.current_inventory_id || null;
@@ -819,12 +802,34 @@
           } else {
             payload.created_by = currentUser.id;
 
-            const { error } = await withTimeout(
-              supabase.from("inventory_items").insert(payload),
-              8000,
-              "insert item"
-            );
-            if (error) throw error;
+            // ===== INSERT com retry e retorno do row (NOVO) =====
+            let res;
+            try {
+              res = await withTimeout(
+                supabase.from("inventory_items").insert(payload).select("*").single(),
+                12000,
+                "insert item"
+              );
+            } catch (e) {
+              if (e?._timeout) {
+                toast("Internet lenta… tentando de novo", "warn", "insert-retry");
+                res = await withTimeout(
+                  supabase.from("inventory_items").insert(payload).select("*").single(),
+                  25000,
+                  "insert item (retry)"
+                );
+              } else {
+                throw e;
+              }
+            }
+
+            if (res?.error) throw res.error;
+
+            // ✅ otimista: já adiciona local (não depende do realtime)
+            if (res?.data) {
+              items = [res.data, ...items.filter(x => x.id !== res.data.id)];
+              renderItems();
+            }
 
             toast("Adicionado ✅", "success", "item-add");
           }
@@ -836,7 +841,9 @@
 
         } catch (e) {
           console.error(e);
-          toast("Falha ao salvar: " + (e?.message || e), "error", "save-fail");
+          const msg = e?.message || e;
+          const supa = (e?.code || e?.status || e?.details || e?.hint) ? supaErrMsg(e) : msg;
+          toast("Falha ao salvar: " + supa, "error", "save-fail");
         } finally {
           overlaySafe(false, "upsert-item");
         }
@@ -1096,7 +1103,7 @@
           essentialFilter === "essential" ? "Essenciais: só essenciais" :
           "Essenciais: só não essenciais";
 
-        renderItems(); // garante render imediato
+        renderItems();
       };
 
       $("exportText").onclick = exportText;
@@ -1128,6 +1135,7 @@
         } catch (e) {
           console.error(e);
           toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
+          // não joga pro register automaticamente
         } finally {
           booting = false;
         }
