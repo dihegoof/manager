@@ -143,6 +143,34 @@
       </div>
 
       <div class="list" id="list"></div>
+
+      <!-- ===== ADMIN (SECRETO) ===== -->
+      <div id="adminBox" class="hidden" style="margin-top:14px;">
+        <div class="divider"></div>
+
+        <div class="row header-row" style="align-items:flex-end;">
+          <div>
+            <div style="font-weight:900;">Admin (secreto)</div>
+            <div class="muted" style="margin-top:4px;">Diagnóstico • reset realtime • copiar SQL</div>
+          </div>
+          <button id="closeAdmin" class="small ghost" type="button">Fechar</button>
+        </div>
+
+        <div class="row mt12" style="gap:8px;">
+          <button class="small" id="adminSync">Forçar sync</button>
+          <button class="small" id="adminRtReset">Resetar realtime</button>
+          <button class="small" id="adminClearLocal">Limpar cache local</button>
+          <button class="small" id="adminDiag">Diagnóstico</button>
+          <button class="small" id="adminCopySql">Copiar SQL reset</button>
+        </div>
+
+        <pre id="adminOut" class="muted" style="white-space:pre-wrap; margin-top:10px; user-select:text;"></pre>
+
+        <div class="muted">
+          ⚠️ “Dropar DB em 1 clique” não é seguro no GitHub Pages.  
+          Aqui eu só te ajudo a copiar o SQL pra colar no Supabase.
+        </div>
+      </div>
     </div>
   </div>
 
@@ -161,13 +189,11 @@
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
-    // ========= READY =========
     const ready = (fn) => (document.readyState === "loading"
       ? document.addEventListener("DOMContentLoaded", fn, { once: true })
       : fn());
 
     ready(() => {
-      // ========= HELPERS =========
       const $ = (id) => document.getElementById(id);
 
       const norm = (s) => (s || "")
@@ -203,7 +229,7 @@
       // ========= TOAST =========
       const lastToastAt = new Map();
       function normalizeToastType(type) {
-        if (type === "success" || type === "error" || type === "warn") return type;
+        if (type === "success" || type === "error" || type === "warn" || type === "info") return type;
         return "warn";
       }
       function toast(message, type = "warn", key = "") {
@@ -233,7 +259,7 @@
         setTimeout(() => wrap.remove(), 3800);
       }
 
-      // ========= OVERLAY (failsafe) =========
+      // ========= OVERLAY =========
       function overlay(on) { $("overlay").classList.toggle("on", !!on); }
       let overlayTimer = null;
       function overlaySafe(on, reason = "") {
@@ -307,10 +333,8 @@
 
       let showOnlyNeeds = false;
       let essentialFilter = "both"; // both | essential | not
-
       let editItemId = null;
 
-      // pending setup (caso confirm email ON)
       const PENDING_KEY = "pending_inv_setup_v4";
       const setPending = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
       const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
@@ -346,7 +370,6 @@
         alert(txt);
       }
 
-      // ✅ garante texto do botão sempre correto (sem precisar refresh)
       function syncEssentialBtn() {
         $("filterEssentials").textContent =
           essentialFilter === "both" ? "Essenciais: ambos" :
@@ -354,7 +377,7 @@
           "Essenciais: só não essenciais";
       }
 
-      // ========= RENDER MEMBERS =========
+      // ========= MEMBERS =========
       function renderMembers() {
         const host = $("membersList");
         host.innerHTML = "";
@@ -384,13 +407,12 @@
             <div class="name">${m.display_name || "Usuário"}${star}</div>
             <div class="sub">cargo: ${m.role} • visto: ${fmtDate(m.last_seen_at)}</div>
           `;
-
           row.appendChild(left);
           host.appendChild(row);
         }
       }
 
-      // ========= DELETE ITEM (novo) =========
+      // ========= DELETE ITEM =========
       async function deleteItem(it) {
         if (!currentInventoryId) return;
         const ok = confirm(`Remover "${it.name}"?`);
@@ -409,7 +431,6 @@
           if (error) throw error;
 
           toast("Removido ✅", "success", "del-ok");
-          // realtime deve remover; mas garante local também
           items = items.filter(x => x.id !== it.id);
           renderItems();
         } catch (e) {
@@ -420,7 +441,7 @@
         }
       }
 
-      // ========= RENDER ITEMS =========
+      // ========= ITEMS =========
       function renderItems() {
         const q = norm($("search").value);
         const list = $("list");
@@ -465,11 +486,10 @@
 
           const controls = document.createElement("div");
           controls.className = "controls";
-          // ajuda no mobile a não estourar (sem mexer no CSS)
           controls.style.flexWrap = "wrap";
           controls.style.justifyContent = "flex-end";
 
-          // ✅ ordem pedida: + <qtd> - ⚙️ ℹ️ 🗑️
+          // ordem: + <qtd> - ⚙️ ℹ️ 🗑️
           const plus = document.createElement("button");
           plus.textContent = "+";
           plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
@@ -666,7 +686,7 @@
 
         overlaySafe(true, "boot");
         try {
-          syncEssentialBtn(); // ✅ garante aparecer certo sempre
+          syncEssentialBtn();
           await loadInventoryMeta(invId);
           await Promise.all([ loadItems(invId), loadMembers(invId) ]);
           await startRealtime(invId);
@@ -676,7 +696,6 @@
         }
       }
 
-      // ✅ BOOT DEFINITIVO (se tiver inv -> entra; se não -> cria; se perdeu acesso -> admin)
       async function bootFromProfile() {
         if (!currentUser) return;
 
@@ -861,7 +880,6 @@
 
         const newQty = round(Math.max(0, Number(it.qty || 0) + Number(delta)));
 
-        // otimista
         items = items.map(x => x.id === itemId ? { ...x, qty: newQty } : x);
         renderItems();
 
@@ -1103,7 +1121,7 @@
         else if (essentialFilter === "essential") essentialFilter = "not";
         else essentialFilter = "both";
 
-        syncEssentialBtn();   // ✅ agora atualiza na hora sempre
+        syncEssentialBtn();
         renderItems();
       };
 
@@ -1144,7 +1162,7 @@
       // ========= FIRST PAINT =========
       (async () => {
         try {
-          syncEssentialBtn(); // ✅ garante botão certo mesmo antes do login
+          syncEssentialBtn();
           const session = await getSession();
           if (!session?.user) return showLogin();
 
@@ -1157,9 +1175,138 @@
         }
       })();
 
-      // Offline/Online
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
+
+      // ========= ADMIN SECRETO =========
+      function openAdmin(msg="") {
+        $("adminBox").classList.remove("hidden");
+        $("adminOut").textContent = msg || "Admin aberto.";
+        toast("Admin aberto 🔒", "info", "admin-open");
+      }
+      function closeAdmin() {
+        $("adminBox").classList.add("hidden");
+      }
+      $("closeAdmin").onclick = closeAdmin;
+
+      $("adminSync").onclick = async () => {
+        if (!currentInventoryId) return;
+        overlaySafe(true, "admin-sync");
+        try {
+          await Promise.all([ loadItems(currentInventoryId), loadMembers(currentInventoryId) ]);
+          $("adminOut").textContent = "Sync feito ✅";
+          toast("Sync feito ✅", "success", "admin-sync");
+        } catch (e) {
+          console.error(e);
+          $("adminOut").textContent = "Erro no sync: " + (e?.message || e);
+          toast("Erro no sync: " + (e?.message || e), "error", "admin-sync-fail");
+        } finally {
+          overlaySafe(false, "admin-sync");
+        }
+      };
+
+      $("adminRtReset").onclick = async () => {
+        if (!currentInventoryId) return;
+        overlaySafe(true, "admin-rt-reset");
+        try {
+          await startRealtime(currentInventoryId);
+          $("adminOut").textContent = "Realtime resetado ✅";
+          toast("Realtime resetado ✅", "success", "admin-rt");
+        } catch (e) {
+          console.error(e);
+          $("adminOut").textContent = "Erro no realtime: " + (e?.message || e);
+          toast("Erro no realtime: " + (e?.message || e), "error", "admin-rt-fail");
+        } finally {
+          overlaySafe(false, "admin-rt-reset");
+        }
+      };
+
+      $("adminClearLocal").onclick = () => {
+        const ok = confirm("Limpar cache local (pending + flags)?");
+        if (!ok) return;
+        try {
+          clearPending();
+          localStorage.removeItem("pending_inv_setup_v4");
+          $("adminOut").textContent = "Cache local limpo ✅";
+          toast("Cache local limpo ✅", "success", "admin-local");
+        } catch (e) {
+          $("adminOut").textContent = "Falha limpando cache: " + (e?.message || e);
+          toast("Falha limpando cache", "error", "admin-local-fail");
+        }
+      };
+
+      $("adminDiag").onclick = async () => {
+        const s = await getSession();
+        const lines = [];
+        lines.push("=== DIAGNÓSTICO ===");
+        lines.push("online: " + (navigator.onLine ? "sim" : "não"));
+        lines.push("user: " + (currentUser?.id || "—"));
+        lines.push("email: " + (currentUser?.email || "—"));
+        lines.push("inventory: " + (currentInventoryId || "—"));
+        lines.push("items: " + items.length);
+        lines.push("members: " + members.length);
+        lines.push("session: " + (s?.access_token ? "ok" : "null"));
+        lines.push("rt-items: " + (realtimeItems ? "on" : "off"));
+        lines.push("rt-members: " + (realtimeMembers ? "on" : "off"));
+        $("adminOut").textContent = lines.join("\n");
+      };
+
+      const RESET_SQL = `
+-- Cole isso no Supabase SQL Editor (NÃO coloque no app)
+-- ATENÇÃO: vai apagar estruturas do app (use por sua conta).
+
+-- DROPs seguros (se existirem)
+drop table if exists public.inventory_items cascade;
+drop table if exists public.inventory_members cascade;
+drop table if exists public.inventories cascade;
+drop table if exists public.profiles cascade;
+
+-- Se você tiver functions/rpcs específicas, apague aqui também:
+-- drop function if exists public.create_inventory_and_set_profile(...) cascade;
+-- drop function if exists public.join_inventory_by_code(...) cascade;
+-- drop function if exists public.touch_updated_at() cascade;
+-- drop function if exists public.items_history() cascade;
+`.trim();
+
+      $("adminCopySql").onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(RESET_SQL);
+          $("adminOut").textContent = "SQL copiado ✅\n\n" + RESET_SQL;
+          toast("SQL copiado ✅", "success", "admin-sql");
+        } catch {
+          $("adminOut").textContent = RESET_SQL;
+          toast("Não consegui copiar. Copie manualmente do painel.", "warn", "admin-sql-fail");
+        }
+      };
+
+      // Abrir admin: Konami code ou 7 cliques no footer
+      const KONAMI = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"];
+      let konIdx = 0;
+      window.addEventListener("keydown", (e) => {
+        const k = e.key;
+        const expect = KONAMI[konIdx];
+        if ((k === expect) || (k.toLowerCase() === expect)) {
+          konIdx++;
+          if (konIdx >= KONAMI.length) {
+            konIdx = 0;
+            openAdmin("Konami code ✅");
+          }
+        } else {
+          konIdx = 0;
+        }
+      });
+
+      let footerClicks = 0;
+      let footerTimer = null;
+      $("footer").addEventListener("click", () => {
+        footerClicks++;
+        clearTimeout(footerTimer);
+        footerTimer = setTimeout(() => footerClicks = 0, 1200);
+        if (footerClicks >= 7) {
+          footerClicks = 0;
+          openAdmin("Aberto por clique no rodapé ✅");
+        }
+      });
     });
   </script>
 </body>
