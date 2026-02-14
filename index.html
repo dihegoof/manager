@@ -73,19 +73,27 @@
   <div id="appView" class="wrap hidden">
     <div class="card">
       <div class="row header-row">
-        <h1 class="title" style="margin-bottom:0;">Inventário da Casa</h1>
-
-        <div class="row" style="gap:8px; align-items:center; justify-content:flex-end;">
-          <!-- admin button (só aparece se liberar admin) -->
-          <button id="adminBtn" class="small ghost hidden" title="Painel admin" type="button">🛠️</button>
-
-          <button id="logoutBtn" class="small">Sair</button>
-        </div>
+        <h1 class="title">Inventário da Casa</h1>
+        <button id="logoutBtn" class="small">Sair</button>
       </div>
 
       <div class="muted" style="margin-top:6px;">
         Código do inventário:
         <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- MEMBERS -->
+      <div id="membersBox">
+        <div class="row header-row" style="align-items:flex-end;">
+          <div>
+            <div style="font-weight:900;">Membros</div>
+            <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
+          </div>
+          <div class="pill" id="myRolePill" title="Seu cargo">—</div>
+        </div>
+        <div id="membersList" class="list" style="margin-top:10px;"></div>
       </div>
 
       <div class="divider"></div>
@@ -135,62 +143,6 @@
       </div>
 
       <div class="list" id="list"></div>
-
-      <div class="divider"></div>
-
-      <!-- MEMBERS (rodapé do card) -->
-      <div id="membersBox">
-        <div class="row header-row" style="align-items:flex-end;">
-          <div>
-            <div style="font-weight:900;">Membros</div>
-            <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
-          </div>
-          <div class="pill" id="myRolePill" title="Seu cargo">—</div>
-        </div>
-        <div id="membersList" class="list" style="margin-top:10px;"></div>
-      </div>
-    </div>
-
-    <!-- ✅ MODAL ADMIN FORA DO CARD (importante) -->
-    <div id="adminBackdrop" class="modal-backdrop" aria-hidden="true">
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Painel admin">
-        <div class="row header-row">
-          <div class="section-title">Painel Admin</div>
-          <button id="adminClose" class="small ghost" type="button">Fechar</button>
-        </div>
-
-        <!-- login admin -->
-        <div id="adminLoginBox">
-          <div class="muted" style="margin-top:6px;">Entre com seu usuário/senha admin.</div>
-          <div class="row mt12">
-            <input id="adminUser" placeholder="Usuário" autocomplete="off" />
-            <input id="adminPass" placeholder="Senha" type="password" autocomplete="off" />
-          </div>
-          <div class="row mt12">
-            <button id="adminLoginBtn" type="button">Entrar</button>
-          </div>
-          <div class="muted" style="margin-top:8px;">
-            * Este painel é local (não mexe no banco global). É só pra manutenção do app.
-          </div>
-        </div>
-
-        <!-- ações admin -->
-        <div id="adminActionsBox" class="hidden">
-          <div class="muted" style="margin-top:6px;">Ações rápidas (sem destruir DB):</div>
-
-          <div class="row mt12">
-            <button id="adminReloadBtn" class="small" type="button">Recarregar dados</button>
-            <button id="adminResubBtn" class="small" type="button">Reconectar realtime</button>
-            <button id="adminClearLocalBtn" class="small ghost" type="button">Limpar cache local</button>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="muted">
-            Dica: se o realtime travar em algum navegador, “Reconectar realtime” resolve sem reload total.
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -251,7 +203,7 @@
       // ========= TOAST =========
       const lastToastAt = new Map();
       function normalizeToastType(type) {
-        if (type === "success" || type === "error" || type === "warn" || type === "info") return type;
+        if (type === "success" || type === "error" || type === "warn") return type;
         return "warn";
       }
       function toast(message, type = "warn", key = "") {
@@ -364,33 +316,6 @@
       const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
       const clearPending = () => localStorage.removeItem(PENDING_KEY);
 
-      // ========= ADMIN (local, simples) =========
-      const ADMIN_USER = "admin";
-      const ADMIN_PASS = "admin000teste";
-      let isAdmin = false;
-
-      function syncAdminUI() {
-        $("adminBtn").classList.toggle("hidden", !isAdmin);
-      }
-
-      function openAdmin() {
-        if (!currentUser) return; // não abre sem login normal
-        $("adminBackdrop").classList.add("on");
-        $("adminBackdrop").setAttribute("aria-hidden", "false");
-        // se já está logado como admin, vai direto
-        $("adminLoginBox").classList.toggle("hidden", isAdmin);
-        $("adminActionsBox").classList.toggle("hidden", !isAdmin);
-      }
-
-      function closeAdmin() {
-        $("adminBackdrop").classList.remove("on");
-        $("adminBackdrop").setAttribute("aria-hidden", "true");
-      }
-
-      $("adminBackdrop").addEventListener("click", (e) => {
-        if (e.target === $("adminBackdrop")) closeAdmin();
-      });
-
       function needsBuy(it) {
         const qty = Number(it.qty ?? 0);
         const min = Number(it.min_qty ?? 0);
@@ -490,33 +415,18 @@
 
           const left = document.createElement("div");
           const needs = needsBuy(it);
-
-          const sub = document.createElement("div");
-          sub.className = "sub";
-          sub.innerHTML = `
-            <span>${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}</span>
-            ${needs ? '<span class="pill danger">precisa comprar</span>' : ""}
-            ${it.essential ? '<span class="pill">essencial</span>' : ""}
+          const ess = it.essential ? ' • <span class="pill">essencial</span>' : "";
+          left.innerHTML = `
+            <div class="name">${it.name}</div>
+            <div class="sub">
+              ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
+              ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
+              ${ess}
+            </div>
           `;
-
-          const nm = document.createElement("div");
-          nm.className = "name";
-          nm.textContent = it.name;
-
-          left.appendChild(nm);
-          left.appendChild(sub);
 
           const controls = document.createElement("div");
           controls.className = "controls";
-
-          // ✅ ORDEM: + <qtd> - ⚙️ ℹ️ 🗑️
-          const plus = document.createElement("button");
-          plus.textContent = "+";
-          plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
-
-          const qty = document.createElement("div");
-          qty.className = "qty pill";
-          qty.textContent = `${it.qty} ${it.unit}`;
 
           const minus = document.createElement("button");
           minus.textContent = "−";
@@ -532,13 +442,15 @@
           info.title = "Info / histórico";
           info.onclick = () => showInfo(it);
 
-          const del = document.createElement("button");
-          del.textContent = "🗑️";
-          del.title = "Excluir";
-          del.onclick = () => deleteItem(it);
+          const qty = document.createElement("div");
+          qty.className = "qty pill";
+          qty.textContent = `${it.qty} ${it.unit}`;
 
-          controls.append(plus, qty, minus, edit, info, del);
+          const plus = document.createElement("button");
+          plus.textContent = "+";
+          plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
 
+          controls.append(minus, edit, info, qty, plus);
           row.append(left, controls);
           list.appendChild(row);
         }
@@ -720,20 +632,51 @@
       async function bootFromProfile() {
         if (!currentUser) return;
 
+        // garante sessão antes de consultar (evita corrida auth.uid null)
+        const sess = await getSession();
+        if (!sess?.user) return;
+        currentUser = sess.user;
+
         // 1) tenta finalizar pending (se houver)
         const did = await finalizePendingIfAny();
         if (did) return;
 
-        // 2) profile
-        const { data: prof, error } = await withTimeout(
-          supabase.from("profiles")
-            .select("current_inventory_id, display_name")
-            .eq("user_id", currentUser.id)
-            .maybeSingle(),
-          8000,
-          "load profile"
-        );
-        if (error) throw error;
+        // 2) profile (COM RETRY + UPSERT SE FALHAR)
+        let prof = null;
+        try {
+          const { data, error } = await withTimeout(
+            supabase.from("profiles")
+              .select("current_inventory_id, display_name")
+              .eq("user_id", currentUser.id)
+              .maybeSingle(),
+            8000,
+            "load profile"
+          );
+          if (error) throw error;
+          prof = data || null;
+
+        } catch (e) {
+          console.warn("load profile failed:", e?.message || e);
+
+          try {
+            await ensureProfileRow("Usuário");
+            const { data, error } = await withTimeout(
+              supabase.from("profiles")
+                .select("current_inventory_id, display_name")
+                .eq("user_id", currentUser.id)
+                .maybeSingle(),
+              8000,
+              "load profile retry"
+            );
+            if (error) throw error;
+            prof = data || null;
+          } catch (e2) {
+            console.error("profile retry failed:", e2?.message || e2);
+            toast("Falha ao carregar perfil. Verifique o banco/policies.", "error", "profile-hard-fail");
+            showLogin();
+            return;
+          }
+        }
 
         const displayName = prof?.display_name || "Usuário";
         const invId = prof?.current_inventory_id || null;
@@ -812,7 +755,7 @@
       setInterval(() => { pingLastSeen(); }, 60_000);
       window.addEventListener("focus", () => { pingLastSeen(); });
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) pingLastSeen();
+        if (!document.hidden) pingLastSeen(); // ✅ sem overlay aqui
       });
 
       // ========= ITEMS CRUD =========
@@ -919,30 +862,6 @@
           console.warn(error);
           toast("Não salvou no cloud: " + error.message, "error", "qty-fail");
           try { await loadItems(currentInventoryId); } catch {}
-        }
-      }
-
-      async function deleteItem(it) {
-        if (!it?.id) return;
-        const ok = confirm(`Excluir "${it.name}"?`);
-        if (!ok) return;
-
-        // otimista
-        items = items.filter(x => x.id !== it.id);
-        renderItems();
-
-        const { error } = await supabase
-          .from("inventory_items")
-          .delete()
-          .eq("id", it.id)
-          .eq("inventory_id", currentInventoryId);
-
-        if (error) {
-          console.warn(error);
-          toast("Falha ao excluir: " + error.message, "error", "del-fail");
-          try { await loadItems(currentInventoryId); } catch {}
-        } else {
-          toast("Excluído ✅", "success", "del-ok");
         }
       }
 
@@ -1137,9 +1056,6 @@
           items = [];
           members = [];
           resetEdit();
-          isAdmin = false;
-          syncAdminUI();
-          closeAdmin();
           showLogin();
           toast("Saiu.", "warn", "logout");
         } finally {
@@ -1180,66 +1096,12 @@
           essentialFilter === "essential" ? "Essenciais: só essenciais" :
           "Essenciais: só não essenciais";
 
-        renderItems();
+        renderItems(); // garante render imediato
       };
 
       $("exportText").onclick = exportText;
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
-
-      // ========= ADMIN EVENTS =========
-      $("adminBtn").onclick = () => openAdmin();
-      $("adminClose").onclick = () => closeAdmin();
-
-      $("adminLoginBtn").onclick = () => {
-        const u = ($("adminUser").value || "").trim();
-        const p = ($("adminPass").value || "").trim();
-        if (u === ADMIN_USER && p === ADMIN_PASS) {
-          isAdmin = true;
-          toast("Admin liberado ✅", "success", "admin-ok");
-          $("adminUser").value = "";
-          $("adminPass").value = "";
-          openAdmin();
-          syncAdminUI();
-        } else {
-          toast("Usuário/senha admin inválidos.", "error", "admin-bad");
-        }
-      };
-
-      $("adminReloadBtn").onclick = async () => {
-        if (!currentInventoryId) return;
-        overlaySafe(true, "admin-reload");
-        try {
-          await Promise.all([ loadItems(currentInventoryId), loadMembers(currentInventoryId) ]);
-          toast("Dados recarregados ✅", "success", "admin-reload-ok");
-        } catch (e) {
-          toast("Falha ao recarregar: " + (e?.message || e), "error", "admin-reload-fail");
-        } finally {
-          overlaySafe(false, "admin-reload");
-        }
-      };
-
-      $("adminResubBtn").onclick = async () => {
-        if (!currentInventoryId) return;
-        overlaySafe(true, "admin-resub");
-        try {
-          await startRealtime(currentInventoryId);
-          toast("Realtime reconectado ✅", "success", "admin-resub-ok");
-        } catch (e) {
-          toast("Falha ao reconectar: " + (e?.message || e), "error", "admin-resub-fail");
-        } finally {
-          overlaySafe(false, "admin-resub");
-        }
-      };
-
-      $("adminClearLocalBtn").onclick = () => {
-        try {
-          localStorage.removeItem(PENDING_KEY);
-          toast("Cache local limpo ✅", "success", "admin-local-ok");
-        } catch {
-          toast("Não consegui limpar cache local.", "error", "admin-local-fail");
-        }
-      };
 
       // ========= AUTH STATE (SEM “TROCA ABA = LOADING”) =========
       let booting = false;
@@ -1254,9 +1116,6 @@
           items = [];
           members = [];
           resetEdit();
-          isAdmin = false;
-          syncAdminUI();
-          closeAdmin();
           showLogin();
           return;
         }
@@ -1266,7 +1125,6 @@
           currentUser = session.user;
           await bootFromProfile();
           pingLastSeen();
-          syncAdminUI(); // admin só aparece se liberado (local)
         } catch (e) {
           console.error(e);
           toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
@@ -1279,18 +1137,13 @@
       (async () => {
         try {
           const session = await getSession();
-          if (!session?.user) {
-            syncAdminUI();
-            return showLogin();
-          }
+          if (!session?.user) return showLogin();
 
           currentUser = session.user;
           await bootFromProfile();
           pingLastSeen();
-          syncAdminUI();
         } catch (e) {
           console.error(e);
-          syncAdminUI();
           showLogin();
         }
       })();
@@ -1298,10 +1151,6 @@
       // Offline/Online (sem “cair da conta”)
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
-
-      // init UI
-      syncRegisterUI();
-      syncAdminUI();
     });
   </script>
 </body>
