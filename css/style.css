@@ -1,11 +1,12 @@
 :root{
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
 
-  --bg: #f6fbff;
+  /* iOS-ish */
+  --bg: #f2f5fb;
   --card: #ffffff;
   --text: #0b1220;
   --muted: #5b6b85;
-  --line: rgba(11,18,32,.14);
+  --line: rgba(11,18,32,.10);
 
   --primary: #7cc9ff;
   --primary-2: #2aa9ff;
@@ -22,7 +23,9 @@ body{
   min-height: 100vh;
   display:flex;
   flex-direction: column;
-  background: var(--bg);
+  background: radial-gradient(1200px 800px at 20% -10%, rgba(124,201,255,.25), transparent 60%),
+              radial-gradient(900px 700px at 90% 10%, rgba(42,169,255,.14), transparent 60%),
+              var(--bg);
   color: var(--text);
 }
 
@@ -34,24 +37,38 @@ body{
 
 /* layout */
 .wrap{
-  max-width: 900px;
+  max-width: 980px;
   width: 100%;
   margin: 0 auto;
-  padding: 16px;
+  padding: 14px;
+  display:flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .card{
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  background: rgba(255,255,255,.92);
+  border: 1px solid rgba(11,18,32,.08);
+  border-radius: 22px;
   padding: 14px;
-  box-shadow: 0 6px 22px rgba(16,24,40,.06);
+  box-shadow:
+    0 10px 30px rgba(16,24,40,.06),
+    0 1px 0 rgba(255,255,255,.6) inset;
+  backdrop-filter: blur(4px);
 }
 
 .title{
   margin: 0 0 12px;
   font-size: 20px;
-  font-weight: 800;
+  font-weight: 850;
+}
+
+.sectionTitle{
+  font-weight: 900;
+  font-size: 14px;
+  margin-bottom: 10px;
+  letter-spacing: .2px;
+  color: #0b1220;
 }
 
 .row{
@@ -65,15 +82,67 @@ body{
   align-items:center;
 }
 
+/* top grid */
+.topGrid{
+  display:grid;
+  grid-template-columns: 1fr 300px;
+  gap: 12px;
+}
+.bannerCard{
+  min-height: 86px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  padding: 16px;
+}
+.bannerText{
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: .4px;
+  text-transform: lowercase;
+  color: #0b1220;
+}
+.profileCard{
+  display:flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.profileLine{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.statusDot{
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(34,197,94,.9);
+  box-shadow: 0 0 0 6px rgba(34,197,94,.12);
+}
+.statusDot.off{
+  background: rgba(239,68,68,.9);
+  box-shadow: 0 0 0 6px rgba(239,68,68,.12);
+}
+.statusText{
+  font-weight: 900;
+  color: #183045;
+}
+.profileActions{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+}
+
 /* inputs */
 input, select, button{
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: #fff;
+  border-radius: 16px;
+  border: 1px solid rgba(11,18,32,.10);
+  background: rgba(255,255,255,.96);
   color: var(--text);
   padding: 12px;
   font-size: 14px;
   outline:none;
+  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset;
 }
 
 input{
@@ -87,22 +156,22 @@ select{
 
 button{
   cursor:pointer;
-  font-weight: 700;
-  background: linear-gradient(180deg, rgba(124,201,255,.55), rgba(124,201,255,.18));
+  font-weight: 800;
+  background: linear-gradient(180deg, rgba(124,201,255,.62), rgba(124,201,255,.18));
   border-color: rgba(124,201,255,.55);
 }
 
-button:hover{ filter: brightness(.98); }
+button:hover{ filter: brightness(.985); }
 
 .small{
   padding: 9px 10px;
   font-size: 13px;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 button.ghost{
-  background: transparent;
-  border-color: var(--line);
+  background: rgba(255,255,255,.82);
+  border-color: rgba(11,18,32,.10);
 }
 
 button:disabled{
@@ -112,7 +181,7 @@ button:disabled{
 
 /* filtro ativo */
 #filterList.active{
-  background: linear-gradient(180deg, rgba(42,169,255,.25), rgba(42,169,255,.10));
+  background: linear-gradient(180deg, rgba(42,169,255,.28), rgba(42,169,255,.12));
   border-color: rgba(42,169,255,.45);
 }
 
@@ -132,42 +201,74 @@ button:disabled{
 
 .item{
   display:flex;
-  align-items:center;
+  align-items:flex-start;
   justify-content:space-between;
   gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #fff;
+  padding: 12px 12px;
+  border: 1px solid rgba(11,18,32,.08);
+  border-radius: 20px;
+  background: rgba(255,255,255,.92);
 }
 
-.name{ font-weight: 850; }
+.name{ font-weight: 950; }
 
 .sub{
   color: var(--muted);
   font-size: 12px;
+  margin-top: 2px;
+  line-height: 1.25;
 }
 
+/* controls: nunca sair da tela */
 .controls{
   display:flex;
   align-items:center;
+  justify-content:flex-end;
   gap:8px;
+  flex-wrap:wrap;
+  max-width: 52%;
 }
 
+/* botões icones (compactos e iguais) */
+.btnIcon{
+  padding: 10px 12px;
+  border-radius: 16px;
+  min-width: 44px;
+  text-align:center;
+}
+.dangerBtn{
+  border-color: rgba(239,68,68,.32);
+  background: linear-gradient(180deg, rgba(239,68,68,.20), rgba(239,68,68,.10));
+}
+
+/* qty pill */
 .qty{
-  min-width: 78px;
+  min-width: 92px;
   text-align:center;
   font-variant-numeric: tabular-nums;
 }
 
 /* pills */
 .pill{
-  padding: 6px 10px;
+  padding: 7px 12px;
   border-radius: 999px;
-  background: rgba(124,201,255,.18);
-  border: 1px solid rgba(124,201,255,.45);
+  background: rgba(124,201,255,.14);
+  border: 1px solid rgba(124,201,255,.40);
   font-size: 12px;
   color: #0b3a52;
+}
+.pill.copy{ cursor:pointer; }
+.pill.subtle{
+  background: rgba(11,18,32,.04);
+  border-color: rgba(11,18,32,.08);
+  color: rgba(11,18,32,.78);
+}
+.pill.mini{
+  padding: 4px 10px;
+  font-size: 11px;
+  margin-left: 6px;
+  display:inline-block;
+  transform: translateY(-1px);
 }
 
 .danger{
@@ -185,7 +286,7 @@ button:disabled{
 /* divider */
 .divider{
   height: 1px;
-  background: var(--line);
+  background: rgba(11,18,32,.10);
   margin: 12px 0;
 }
 
@@ -201,7 +302,7 @@ button:disabled{
 
 .login-card{
   width: min(460px, 100%);
-  border-radius: 18px;
+  border-radius: 22px;
   padding: 16px;
 }
 
@@ -267,11 +368,11 @@ button:disabled{
   width: fit-content;
   max-width: 100%;
   padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: #fff;
+  border-radius: 16px;
+  border: 1px solid rgba(11,18,32,.10);
+  background: rgba(255,255,255,.94);
   box-shadow: 0 10px 30px rgba(16,24,40,.10);
-  font-weight: 700;
+  font-weight: 800;
   font-size: 13px;
   position: relative;
   line-height: 1.25;
@@ -285,8 +386,8 @@ button:disabled{
   width: 12px;
   height: 12px;
   background: inherit;
-  border-left: 1px solid var(--line);
-  border-top: 1px solid var(--line);
+  border-left: 1px solid rgba(11,18,32,.10);
+  border-top: 1px solid rgba(11,18,32,.10);
   transform: rotate(45deg);
 }
 
@@ -318,125 +419,41 @@ button:disabled{
 .footer a{
   color: #0b3a52;
   text-decoration: none;
-  font-weight: 800;
+  font-weight: 900;
 }
 .footer a:hover{ text-decoration: underline; }
 
-/* ===== extras (modal + membros) ===== */
-.section-title{
-  font-weight: 900;
-  margin: 0 0 6px;
+/* actions wrap nicely */
+.actions{
+  gap: 10px;
 }
-
-.members{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-
-.member{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #fff;
-}
-
-.member-left .sub{ margin-top: 2px; }
-
-.star{ margin-left: 6px; }
-
-.modal-backdrop{
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.25);
-  display:none;
-  align-items:center;
-  justify-content:center;
-  z-index: 3000;
-  padding: 16px;
-}
-.modal-backdrop.on{ display:flex; }
-
-.modal{
-  width: min(520px, 100%);
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 14px;
-  box-shadow: 0 16px 40px rgba(16,24,40,.16);
-}
-
-.modal .row{ justify-content:flex-end; }
 
 /* responsive */
+@media (max-width: 840px){
+  .topGrid{ grid-template-columns: 1fr; }
+  .profileCard{ order: 2; }
+}
+
 @media (max-width: 540px){
   .wrap{ padding: 12px; }
   input{ min-width: 140px; }
   .w120{ max-width: 100%; flex: 1; }
-  .qty{ min-width: 64px; }
-  .item{ align-items: flex-start; }
-  .controls{ width: 100%; justify-content: flex-end; }
-}
 
-/* ===== FIX MOBILE LISTA + BADGES (adicionado) ===== */
-
-/* badges da linha de baixo não sobrepõem */
-.sub{
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-  align-items:center;
-  line-height: 1.25;
-}
-.sub .pill{ display:inline-flex; }
-
-/* evita botão vazar do card */
-.item{
-  overflow: hidden;
-}
-
-/* controla bem os botões */
-.controls{
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.controls button{
-  min-width: 42px;
-  min-height: 42px;
-  padding: 10px 10px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  line-height: 1;
-}
-
-/* no celular: item vira coluna e controles vão pra linha de baixo */
-@media (max-width: 540px){
   .item{
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
   }
-
   .controls{
-    width: 100%;
+    max-width: 100%;
     justify-content: space-between;
-    gap: 8px;
   }
-
-  /* qty fica central e não estoura */
-  .controls .qty{
-    flex: 1;
+  .qty{
     min-width: 110px;
-    text-align: center;
+    flex: 1;
   }
-
-  /* deixa os botões laterais consistentes */
-  .controls button{
+  .btnIcon{
+    min-width: 44px;
     flex: 0 0 auto;
   }
 }
