@@ -5,13 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Inventário da Casa</title>
   <link rel="stylesheet" href="css/style.css">
-
-  <!-- ✅ PATCH anti-bug “puxar pra baixo e sumir tudo” (mobile/overscroll) -->
-  <style>
-    html, body { min-height: 100%; }
-    html { background: var(--bg, #f6fbff); overscroll-behavior-y: none; }
-    body { background: var(--bg, #f6fbff); }
-  </style>
 </head>
 
 <body>
@@ -79,17 +72,13 @@
   <!-- ===== APP ===== -->
   <div id="appView" class="wrap hidden">
     <div class="card">
-      <!-- ✅ TOPO iOS (online + admin + sair + código) -->
       <div class="row header-row">
-        <h1 class="title" style="margin:0;">Inventário da Casa</h1>
+        <h1 class="title" style="margin-bottom:0;">Inventário da Casa</h1>
 
-        <div class="row" style="gap:8px; align-items:center;">
-          <span id="onlinePill" class="pill good" style="display:inline-flex; align-items:center; gap:8px;">
-            <span id="onlineDot" style="width:10px;height:10px;border-radius:999px;background:rgba(34,197,94,.85);display:inline-block;"></span>
-            <span id="onlineText">online</span>
-          </span>
+        <div class="row" style="gap:8px; align-items:center; justify-content:flex-end;">
+          <!-- admin button (só aparece se liberar admin) -->
+          <button id="adminBtn" class="small ghost hidden" title="Painel admin" type="button">🛠️</button>
 
-          <button id="adminBtn" class="small hidden" title="Admin">🛠️</button>
           <button id="logoutBtn" class="small">Sair</button>
         </div>
       </div>
@@ -97,20 +86,6 @@
       <div class="muted" style="margin-top:6px;">
         Código do inventário:
         <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
-      </div>
-
-      <div class="divider"></div>
-
-      <!-- MEMBERS -->
-      <div id="membersBox">
-        <div class="row header-row" style="align-items:flex-end;">
-          <div>
-            <div style="font-weight:900;">Membros</div>
-            <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
-          </div>
-          <div class="pill" id="myRolePill" title="Seu cargo">—</div>
-        </div>
-        <div id="membersList" class="list" style="margin-top:10px;"></div>
       </div>
 
       <div class="divider"></div>
@@ -160,25 +135,60 @@
       </div>
 
       <div class="list" id="list"></div>
+
+      <div class="divider"></div>
+
+      <!-- MEMBERS (rodapé do card) -->
+      <div id="membersBox">
+        <div class="row header-row" style="align-items:flex-end;">
+          <div>
+            <div style="font-weight:900;">Membros</div>
+            <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
+          </div>
+          <div class="pill" id="myRolePill" title="Seu cargo">—</div>
+        </div>
+        <div id="membersList" class="list" style="margin-top:10px;"></div>
+      </div>
     </div>
 
-    <!-- ✅ ADMIN MODAL (fica DENTRO do appView => nunca aparece deslogado) -->
-    <div id="adminBackdrop" class="modal-backdrop">
-      <div class="modal">
-        <div class="section-title">Admin</div>
-        <div class="muted" style="margin-top:6px;">Manutenção do inventário atual.</div>
-
-        <div class="divider"></div>
-
-        <div class="row" style="justify-content:flex-end;">
-          <button id="adminReload" class="small">Recarregar</button>
-          <button id="adminResub" class="small">Reconectar RT</button>
-          <button id="adminClose" class="small ghost">Fechar</button>
+    <!-- ✅ MODAL ADMIN FORA DO CARD (importante) -->
+    <div id="adminBackdrop" class="modal-backdrop" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Painel admin">
+        <div class="row header-row">
+          <div class="section-title">Painel Admin</div>
+          <button id="adminClose" class="small ghost" type="button">Fechar</button>
         </div>
 
-        <div class="divider"></div>
-        <div class="muted">
-          Obs.: “dropar schema/tabelas/functions/policies” não fica no front por segurança.
+        <!-- login admin -->
+        <div id="adminLoginBox">
+          <div class="muted" style="margin-top:6px;">Entre com seu usuário/senha admin.</div>
+          <div class="row mt12">
+            <input id="adminUser" placeholder="Usuário" autocomplete="off" />
+            <input id="adminPass" placeholder="Senha" type="password" autocomplete="off" />
+          </div>
+          <div class="row mt12">
+            <button id="adminLoginBtn" type="button">Entrar</button>
+          </div>
+          <div class="muted" style="margin-top:8px;">
+            * Este painel é local (não mexe no banco global). É só pra manutenção do app.
+          </div>
+        </div>
+
+        <!-- ações admin -->
+        <div id="adminActionsBox" class="hidden">
+          <div class="muted" style="margin-top:6px;">Ações rápidas (sem destruir DB):</div>
+
+          <div class="row mt12">
+            <button id="adminReloadBtn" class="small" type="button">Recarregar dados</button>
+            <button id="adminResubBtn" class="small" type="button">Reconectar realtime</button>
+            <button id="adminClearLocalBtn" class="small ghost" type="button">Limpar cache local</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="muted">
+            Dica: se o realtime travar em algum navegador, “Reconectar realtime” resolve sem reload total.
+          </div>
         </div>
       </div>
     </div>
@@ -199,11 +209,13 @@
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
+    // ========= READY =========
     const ready = (fn) => (document.readyState === "loading"
       ? document.addEventListener("DOMContentLoaded", fn, { once: true })
       : fn());
 
     ready(() => {
+      // ========= HELPERS =========
       const $ = (id) => document.getElementById(id);
 
       const norm = (s) => (s || "")
@@ -231,6 +243,7 @@
         return Math.floor(ms / (1000 * 60 * 60 * 24));
       }
 
+      // Footer
       $("footer").innerHTML = `© ${new Date().getFullYear()}
         <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
         — Todos os direitos reservados`;
@@ -238,7 +251,7 @@
       // ========= TOAST =========
       const lastToastAt = new Map();
       function normalizeToastType(type) {
-        if (type === "success" || type === "error" || type === "warn") return type;
+        if (type === "success" || type === "error" || type === "warn" || type === "info") return type;
         return "warn";
       }
       function toast(message, type = "warn", key = "") {
@@ -308,7 +321,6 @@
         $("registerForm").classList.add("hidden");
         $("authView").classList.remove("hidden");
         $("appView").classList.add("hidden");
-        closeAdmin();
         $("authView").classList.add("fade-in");
       }
       function showRegister() {
@@ -317,7 +329,6 @@
         $("registerForm").classList.remove("hidden");
         $("authView").classList.remove("hidden");
         $("appView").classList.add("hidden");
-        closeAdmin();
         syncRegisterUI();
         $("authView").classList.add("fade-in");
       }
@@ -331,14 +342,6 @@
         $("invCode").disabled = gen;
         if (gen) $("invCode").value = "";
       }
-
-      // ========= ADMIN MODAL =========
-      function openAdmin() { $("adminBackdrop").classList.add("on"); }
-      function closeAdmin() { $("adminBackdrop").classList.remove("on"); }
-      $("adminClose").onclick = closeAdmin;
-      $("adminBackdrop").addEventListener("click", (e) => {
-        if (e.target === $("adminBackdrop")) closeAdmin();
-      });
 
       // ========= STATE =========
       let currentUser = null;
@@ -360,6 +363,33 @@
       const setPending = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
       const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
       const clearPending = () => localStorage.removeItem(PENDING_KEY);
+
+      // ========= ADMIN (local, simples) =========
+      const ADMIN_USER = "admin";
+      const ADMIN_PASS = "admin000teste";
+      let isAdmin = false;
+
+      function syncAdminUI() {
+        $("adminBtn").classList.toggle("hidden", !isAdmin);
+      }
+
+      function openAdmin() {
+        if (!currentUser) return; // não abre sem login normal
+        $("adminBackdrop").classList.add("on");
+        $("adminBackdrop").setAttribute("aria-hidden", "false");
+        // se já está logado como admin, vai direto
+        $("adminLoginBox").classList.toggle("hidden", isAdmin);
+        $("adminActionsBox").classList.toggle("hidden", !isAdmin);
+      }
+
+      function closeAdmin() {
+        $("adminBackdrop").classList.remove("on");
+        $("adminBackdrop").setAttribute("aria-hidden", "true");
+      }
+
+      $("adminBackdrop").addEventListener("click", (e) => {
+        if (e.target === $("adminBackdrop")) closeAdmin();
+      });
 
       function needsBuy(it) {
         const qty = Number(it.qty ?? 0);
@@ -460,18 +490,33 @@
 
           const left = document.createElement("div");
           const needs = needsBuy(it);
-          const ess = it.essential ? ' • <span class="pill">essencial</span>' : "";
-          left.innerHTML = `
-            <div class="name">${it.name}</div>
-            <div class="sub">
-              ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
-              ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
-              ${ess}
-            </div>
+
+          const sub = document.createElement("div");
+          sub.className = "sub";
+          sub.innerHTML = `
+            <span>${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}</span>
+            ${needs ? '<span class="pill danger">precisa comprar</span>' : ""}
+            ${it.essential ? '<span class="pill">essencial</span>' : ""}
           `;
+
+          const nm = document.createElement("div");
+          nm.className = "name";
+          nm.textContent = it.name;
+
+          left.appendChild(nm);
+          left.appendChild(sub);
 
           const controls = document.createElement("div");
           controls.className = "controls";
+
+          // ✅ ORDEM: + <qtd> - ⚙️ ℹ️ 🗑️
+          const plus = document.createElement("button");
+          plus.textContent = "+";
+          plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
+
+          const qty = document.createElement("div");
+          qty.className = "qty pill";
+          qty.textContent = `${it.qty} ${it.unit}`;
 
           const minus = document.createElement("button");
           minus.textContent = "−";
@@ -487,15 +532,13 @@
           info.title = "Info / histórico";
           info.onclick = () => showInfo(it);
 
-          const qty = document.createElement("div");
-          qty.className = "qty pill";
-          qty.textContent = `${it.qty} ${it.unit}`;
+          const del = document.createElement("button");
+          del.textContent = "🗑️";
+          del.title = "Excluir";
+          del.onclick = () => deleteItem(it);
 
-          const plus = document.createElement("button");
-          plus.textContent = "+";
-          plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
+          controls.append(plus, qty, minus, edit, info, del);
 
-          controls.append(minus, edit, info, qty, plus);
           row.append(left, controls);
           list.appendChild(row);
         }
@@ -597,17 +640,11 @@
           "load members"
         );
         if (error) throw error;
-
         members = Array.isArray(data) ? data : [];
         renderMembers();
 
         const me = members.find(m => m.user_id === currentUser.id);
         $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
-
-        // ✅ admin só owner
-        const isOwner = me?.role === "owner";
-        $("adminBtn").classList.toggle("hidden", !isOwner);
-        if (!isOwner) closeAdmin();
       }
 
       async function stopRealtime() {
@@ -660,9 +697,6 @@
 
             const me = members.find(m => m.user_id === currentUser.id);
             $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
-            const isOwner = me?.role === "owner";
-            $("adminBtn").classList.toggle("hidden", !isOwner);
-            if (!isOwner) closeAdmin();
           })
           .subscribe();
       }
@@ -682,12 +716,15 @@
         }
       }
 
+      // ✅ BOOT DEFINITIVO (se tiver inv -> entra; se não -> cria; se perdeu acesso -> admin)
       async function bootFromProfile() {
         if (!currentUser) return;
 
+        // 1) tenta finalizar pending (se houver)
         const did = await finalizePendingIfAny();
         if (did) return;
 
+        // 2) profile
         const { data: prof, error } = await withTimeout(
           supabase.from("profiles")
             .select("current_inventory_id, display_name")
@@ -701,6 +738,7 @@
         const displayName = prof?.display_name || "Usuário";
         const invId = prof?.current_inventory_id || null;
 
+        // 3) sem inventário -> cria automaticamente
         if (!invId) {
           overlaySafe(true, "auto-create-inv");
           try {
@@ -732,6 +770,7 @@
           }
         }
 
+        // 4) tem inventário -> tenta abrir; se permission -> admin
         try {
           await bootInventory(invId);
           return;
@@ -883,6 +922,30 @@
         }
       }
 
+      async function deleteItem(it) {
+        if (!it?.id) return;
+        const ok = confirm(`Excluir "${it.name}"?`);
+        if (!ok) return;
+
+        // otimista
+        items = items.filter(x => x.id !== it.id);
+        renderItems();
+
+        const { error } = await supabase
+          .from("inventory_items")
+          .delete()
+          .eq("id", it.id)
+          .eq("inventory_id", currentInventoryId);
+
+        if (error) {
+          console.warn(error);
+          toast("Falha ao excluir: " + error.message, "error", "del-fail");
+          try { await loadItems(currentInventoryId); } catch {}
+        } else {
+          toast("Excluído ✅", "success", "del-ok");
+        }
+      }
+
       // ========= EXPORT / IMPORT / CLEAR =========
       function exportText() {
         const lines = items
@@ -979,24 +1042,6 @@
       $("backToLoginBtn").onclick = () => showLogin();
       $("genInv").addEventListener("change", syncRegisterUI);
 
-      $("adminBtn").onclick = () => openAdmin();
-      $("adminReload").onclick = async () => {
-        if (!currentInventoryId) return;
-        overlaySafe(true, "adminReload");
-        try {
-          await Promise.all([loadItems(currentInventoryId), loadMembers(currentInventoryId)]);
-          toast("Recarregado ✅", "success", "admin-reload");
-        } finally { overlaySafe(false, "adminReload"); }
-      };
-      $("adminResub").onclick = async () => {
-        if (!currentInventoryId) return;
-        overlaySafe(true, "adminResub");
-        try {
-          await startRealtime(currentInventoryId);
-          toast("RT reconectado ✅", "success", "admin-resub");
-        } finally { overlaySafe(false, "adminResub"); }
-      };
-
       $("loginBtn").onclick = async () => {
         const email = $("loginEmail").value.trim();
         const password = $("loginPass").value;
@@ -1060,6 +1105,7 @@
             throw error;
           }
 
+          // confirm email ON: não vem session
           if (!data?.session?.user) {
             toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
             showLogin();
@@ -1084,7 +1130,6 @@
       $("logoutBtn").onclick = async () => {
         overlaySafe(true, "logout");
         try {
-          closeAdmin();
           await stopRealtime();
           await supabase.auth.signOut();
           currentUser = null;
@@ -1092,7 +1137,9 @@
           items = [];
           members = [];
           resetEdit();
-          $("adminBtn").classList.add("hidden");
+          isAdmin = false;
+          syncAdminUI();
+          closeAdmin();
           showLogin();
           toast("Saiu.", "warn", "logout");
         } finally {
@@ -1140,21 +1187,76 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ========= AUTH STATE =========
+      // ========= ADMIN EVENTS =========
+      $("adminBtn").onclick = () => openAdmin();
+      $("adminClose").onclick = () => closeAdmin();
+
+      $("adminLoginBtn").onclick = () => {
+        const u = ($("adminUser").value || "").trim();
+        const p = ($("adminPass").value || "").trim();
+        if (u === ADMIN_USER && p === ADMIN_PASS) {
+          isAdmin = true;
+          toast("Admin liberado ✅", "success", "admin-ok");
+          $("adminUser").value = "";
+          $("adminPass").value = "";
+          openAdmin();
+          syncAdminUI();
+        } else {
+          toast("Usuário/senha admin inválidos.", "error", "admin-bad");
+        }
+      };
+
+      $("adminReloadBtn").onclick = async () => {
+        if (!currentInventoryId) return;
+        overlaySafe(true, "admin-reload");
+        try {
+          await Promise.all([ loadItems(currentInventoryId), loadMembers(currentInventoryId) ]);
+          toast("Dados recarregados ✅", "success", "admin-reload-ok");
+        } catch (e) {
+          toast("Falha ao recarregar: " + (e?.message || e), "error", "admin-reload-fail");
+        } finally {
+          overlaySafe(false, "admin-reload");
+        }
+      };
+
+      $("adminResubBtn").onclick = async () => {
+        if (!currentInventoryId) return;
+        overlaySafe(true, "admin-resub");
+        try {
+          await startRealtime(currentInventoryId);
+          toast("Realtime reconectado ✅", "success", "admin-resub-ok");
+        } catch (e) {
+          toast("Falha ao reconectar: " + (e?.message || e), "error", "admin-resub-fail");
+        } finally {
+          overlaySafe(false, "admin-resub");
+        }
+      };
+
+      $("adminClearLocalBtn").onclick = () => {
+        try {
+          localStorage.removeItem(PENDING_KEY);
+          toast("Cache local limpo ✅", "success", "admin-local-ok");
+        } catch {
+          toast("Não consegui limpar cache local.", "error", "admin-local-fail");
+        }
+      };
+
+      // ========= AUTH STATE (SEM “TROCA ABA = LOADING”) =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
         if (booting) return;
 
         if (!session?.user) {
-          closeAdmin();
           await stopRealtime();
           currentUser = null;
           currentInventoryId = null;
           items = [];
           members = [];
           resetEdit();
-          $("adminBtn").classList.add("hidden");
+          isAdmin = false;
+          syncAdminUI();
+          closeAdmin();
           showLogin();
           return;
         }
@@ -1164,6 +1266,7 @@
           currentUser = session.user;
           await bootFromProfile();
           pingLastSeen();
+          syncAdminUI(); // admin só aparece se liberado (local)
         } catch (e) {
           console.error(e);
           toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
@@ -1175,35 +1278,30 @@
       // ========= FIRST PAINT =========
       (async () => {
         try {
-          // online pill
-          function setOnline(on) {
-            $("onlineText").textContent = on ? "online" : "offline";
-            $("onlineDot").style.background = on ? "rgba(34,197,94,.85)" : "rgba(239,68,68,.75)";
-            $("onlinePill").classList.toggle("good", !!on);
-            $("onlinePill").classList.toggle("danger", !on);
-          }
-          setOnline(navigator.onLine);
-
-          window.addEventListener("offline", () => {
-            setOnline(false);
-            toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline");
-          });
-          window.addEventListener("online", () => {
-            setOnline(true);
-            toast("Conexão voltou ✅", "success", "online");
-          });
-
           const session = await getSession();
-          if (!session?.user) return showLogin();
+          if (!session?.user) {
+            syncAdminUI();
+            return showLogin();
+          }
 
           currentUser = session.user;
           await bootFromProfile();
           pingLastSeen();
+          syncAdminUI();
         } catch (e) {
           console.error(e);
+          syncAdminUI();
           showLogin();
         }
       })();
+
+      // Offline/Online (sem “cair da conta”)
+      window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
+      window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
+
+      // init UI
+      syncRegisterUI();
+      syncAdminUI();
     });
   </script>
 </body>
