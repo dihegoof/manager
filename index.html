@@ -71,52 +71,55 @@
 
   <!-- ===== APP ===== -->
   <div id="appView" class="wrap hidden">
+    <!-- Banner (topo) -->
+    <div class="banner-card">
+      <div class="banner-title">inventário de casa</div>
+    </div>
 
-    <!-- TOP AREA (Banner + Profile Panel) -->
-    <div class="topGrid">
-      <!-- Banner -->
-      <div class="card bannerCard">
-        <!-- Se quiser usar imagem depois: coloque um <img class="bannerImg" src="..." /> -->
-        <div class="bannerText">inventário de casa</div>
-      </div>
+    <!-- Top row: painel perfil + bloco código -->
+    <div class="top-grid">
+      <!-- Painel perfil (direita no desktop, empilha no mobile) -->
+      <div class="card profile-card">
+        <div class="profile-top">
+          <div class="online-line">
+            <span class="dot-online" id="onlineDot" title="Status"></span>
+            <span class="online-text" id="onlineText">online</span>
+          </div>
 
-      <!-- Profile Panel -->
-      <div class="card profileCard">
-        <div class="profileLine">
-          <span class="statusDot" id="onlineDot"></span>
-          <span class="statusText" id="onlineText">online</span>
+          <div class="profile-actions">
+            <button id="adminBtn" class="icon-btn hidden" title="Admin">🛠️</button>
+            <button id="logoutBtn" class="small">Sair</button>
+          </div>
         </div>
 
-        <div class="profileActions">
-          <button id="copyInvBtn" class="small ghost" type="button" title="Copiar código">
-            Código
-          </button>
-          <button id="logoutBtn" class="small" type="button">Sair</button>
-        </div>
-
-        <div class="muted" style="margin-top:10px;">
+        <div class="muted" style="margin-top:8px;">
           Código do inventário:
           <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
         </div>
 
-        <div class="pill subtle" id="myRolePill" title="Seu cargo" style="margin-top:10px;">—</div>
+        <div class="divider"></div>
+
+        <div class="muted">
+          Seu cargo:
+          <span id="myRolePill" class="pill" title="Seu cargo">—</span>
+        </div>
+      </div>
+
+      <!-- Buscar (separado) -->
+      <div class="card search-card">
+        <div class="section-h">Buscar</div>
+        <div class="row" style="margin-top:10px;">
+          <input id="search" placeholder="Buscar item" />
+        </div>
       </div>
     </div>
 
-    <!-- SEARCH BLOCK -->
-    <div class="card sectionCard">
-      <div class="sectionTitle">Buscar</div>
-      <div class="row">
-        <input id="search" placeholder="Buscar item" />
-      </div>
-    </div>
-
-    <!-- MAIN BLOCK (Add + actions + list) -->
-    <div class="card sectionCard">
-      <div class="sectionTitle">Itens</div>
+    <!-- Itens -->
+    <div class="card items-card">
+      <div class="section-h">Itens</div>
 
       <!-- ADD / EDIT -->
-      <div class="row">
+      <div class="row" style="margin-top:10px;">
         <input id="name" placeholder="Novo item:" />
         <select id="unit">
           <option value="un">un</option>
@@ -125,16 +128,23 @@
           <option value="ml">ml</option>
           <option value="l">l</option>
         </select>
+      </div>
+
+      <div class="row mt10">
         <input id="qty" type="number" step="0.1" placeholder="Qtd" class="w120" />
         <input id="min" type="number" step="0.1" placeholder="Mín" class="w120" />
+      </div>
 
-        <label class="checkline" style="align-items:center; gap:8px;">
+      <div class="row mt10" style="align-items:center; justify-content:space-between;">
+        <label class="checkline ios-check">
           <input id="essential" type="checkbox" />
           Essencial
         </label>
 
-        <button id="add">Adicionar</button>
-        <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
+        <div class="row" style="gap:8px;">
+          <button id="add">Adicionar</button>
+          <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
+        </div>
       </div>
 
       <div class="muted" id="editHint" style="margin-top:8px;">
@@ -155,17 +165,37 @@
       <div class="list" id="list"></div>
     </div>
 
-    <!-- MEMBERS FOOTER -->
-    <div class="card sectionCard membersCard">
-      <div class="row header-row" style="align-items:flex-end;">
-        <div>
-          <div class="sectionTitle" style="margin:0;">Membros</div>
-          <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
-        </div>
-      </div>
+    <!-- Membros no rodapé -->
+    <div class="card members-card">
+      <div class="section-h">Membros</div>
+      <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
       <div id="membersList" class="list" style="margin-top:10px;"></div>
     </div>
+  </div>
 
+  <!-- Admin modal (seguro: só ações locais/itens do inventário, NÃO dropa schema) -->
+  <div id="adminBackdrop" class="modal-backdrop">
+    <div class="modal">
+      <div class="section-h">Admin</div>
+      <div class="muted" style="margin-top:6px;">
+        Painel de manutenção do inventário atual.
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row" style="gap:10px; justify-content:flex-start;">
+        <button id="adminReload" class="small">Recarregar</button>
+        <button id="adminResub" class="small">Reconectar tempo real</button>
+        <button id="adminClose" class="small ghost">Fechar</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="muted">
+        ⚠️ Não incluí botão de “dropar tabelas/functions/policies” porque isso é perigoso (um clique e você perde o banco).
+        Se você quiser resetar o banco, faz via SQL no Supabase com script controlado.
+      </div>
+    </div>
   </div>
 
   <!-- Footer -->
@@ -183,13 +213,11 @@
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
-    // ========= READY =========
     const ready = (fn) => (document.readyState === "loading"
       ? document.addEventListener("DOMContentLoaded", fn, { once: true })
       : fn());
 
     ready(() => {
-      // ========= HELPERS =========
       const $ = (id) => document.getElementById(id);
 
       const norm = (s) => (s || "")
@@ -217,7 +245,6 @@
         return Math.floor(ms / (1000 * 60 * 60 * 24));
       }
 
-      // Footer
       $("footer").innerHTML = `© ${new Date().getFullYear()}
         <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
         — Todos os direitos reservados`;
@@ -225,7 +252,7 @@
       // ========= TOAST =========
       const lastToastAt = new Map();
       function normalizeToastType(type) {
-        if (type === "success" || type === "error" || type === "warn" || type === "info") return type;
+        if (type === "success" || type === "error" || type === "warn") return type;
         return "warn";
       }
       function toast(message, type = "warn", key = "") {
@@ -329,6 +356,7 @@
 
       let showOnlyNeeds = false;
       let essentialFilter = "both"; // both | essential | not
+
       let editItemId = null;
 
       // pending setup (caso confirm email ON)
@@ -336,14 +364,6 @@
       const setPending = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
       const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
       const clearPending = () => localStorage.removeItem(PENDING_KEY);
-
-      function setOnlineUI(isOnline) {
-        const dot = $("onlineDot");
-        const txt = $("onlineText");
-        dot.classList.toggle("off", !isOnline);
-        txt.textContent = isOnline ? "online" : "offline";
-      }
-      setOnlineUI(navigator.onLine);
 
       function needsBuy(it) {
         const qty = Number(it.qty ?? 0);
@@ -444,22 +464,22 @@
 
           const left = document.createElement("div");
           const needs = needsBuy(it);
-          const ess = it.essential ? ' <span class="pill mini">essencial</span>' : "";
-          const needsPill = needs ? ' <span class="pill mini danger">precisa comprar</span>' : "";
+          const ess = it.essential ? ' • <span class="pill">essencial</span>' : "";
           left.innerHTML = `
             <div class="name">${it.name}</div>
             <div class="sub">
               ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
-              ${needsPill}${ess}
+              ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
+              ${ess}
             </div>
           `;
 
           const controls = document.createElement("div");
           controls.className = "controls";
 
-          // ORDEM: + [qtd] - ⚙️ ℹ️ 🗑️
+          // ✅ ordem iOS que você pediu: + <quant> - ⚙️ ℹ️ 🗑️
           const plus = document.createElement("button");
-          plus.className = "btnIcon";
+          plus.className = "icon-btn";
           plus.textContent = "+";
           plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
 
@@ -468,27 +488,27 @@
           qty.textContent = `${it.qty} ${it.unit}`;
 
           const minus = document.createElement("button");
-          minus.className = "btnIcon";
+          minus.className = "icon-btn";
           minus.textContent = "−";
           minus.onclick = () => changeQty(it.id, it.unit === "un" ? -1 : -0.1);
 
           const edit = document.createElement("button");
-          edit.className = "btnIcon";
+          edit.className = "icon-btn";
           edit.textContent = "⚙️";
           edit.title = "Editar";
           edit.onclick = () => startEdit(it);
 
           const info = document.createElement("button");
-          info.className = "btnIcon";
+          info.className = "icon-btn";
           info.textContent = "ℹ️";
           info.title = "Info / histórico";
           info.onclick = () => showInfo(it);
 
           const del = document.createElement("button");
-          del.className = "btnIcon dangerBtn";
+          del.className = "icon-btn danger-btn";
           del.textContent = "🗑️";
           del.title = "Excluir";
-          del.onclick = () => deleteItem(it);
+          del.onclick = () => deleteItem(it.id, it.name);
 
           controls.append(plus, qty, minus, edit, info, del);
           row.append(left, controls);
@@ -597,6 +617,10 @@
 
         const me = members.find(m => m.user_id === currentUser.id);
         $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
+
+        // ✅ mostra admin só pra owner
+        const isOwner = me?.role === "owner";
+        $("adminBtn").classList.toggle("hidden", !isOwner);
       }
 
       async function stopRealtime() {
@@ -649,6 +673,7 @@
 
             const me = members.find(m => m.user_id === currentUser.id);
             $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
+            $("adminBtn").classList.toggle("hidden", me?.role !== "owner");
           })
           .subscribe();
       }
@@ -663,12 +688,13 @@
           await Promise.all([ loadItems(invId), loadMembers(invId) ]);
           await startRealtime(invId);
           toast("Sincronizado ✅", "success", "synced");
+          $("onlineText").textContent = "online";
+          $("onlineDot").classList.add("on");
         } finally {
           overlaySafe(false, "boot");
         }
       }
 
-      // ✅ BOOT DEFINITIVO (se tiver inv -> entra; se não -> cria; se perdeu acesso -> admin)
       async function bootFromProfile() {
         if (!currentUser) return;
 
@@ -756,7 +782,6 @@
 
         if (error) console.warn("last_seen update:", error.message);
       }
-
       setInterval(() => { pingLastSeen(); }, 60_000);
       window.addEventListener("focus", () => { pingLastSeen(); });
       document.addEventListener("visibilitychange", () => {
@@ -824,21 +849,12 @@
           } else {
             payload.created_by = currentUser.id;
 
-            // ✅ pega a row criada (aparece na hora)
-            const { data, error } = await withTimeout(
-              supabase.from("inventory_items")
-                .insert(payload)
-                .select("*")
-                .single(),
-              9000,
+            const { error } = await withTimeout(
+              supabase.from("inventory_items").insert(payload),
+              8000,
               "insert item"
             );
             if (error) throw error;
-
-            if (data?.id) {
-              items = [data, ...items.filter(x => x.id !== data.id)];
-              renderItems();
-            }
 
             toast("Adicionado ✅", "success", "item-add");
           }
@@ -853,6 +869,29 @@
           toast("Falha ao salvar: " + (e?.message || e), "error", "save-fail");
         } finally {
           overlaySafe(false, "upsert-item");
+        }
+      }
+
+      async function deleteItem(itemId, itemName) {
+        if (!confirm(`Excluir "${itemName}"?`)) return;
+
+        overlaySafe(true, "delete");
+        try {
+          const { error } = await withTimeout(
+            supabase.from("inventory_items")
+              .delete()
+              .eq("id", itemId)
+              .eq("inventory_id", currentInventoryId),
+            9000,
+            "delete item"
+          );
+          if (error) throw error;
+          toast("Excluído ✅", "success", "del-ok");
+        } catch (e) {
+          console.error(e);
+          toast("Falha ao excluir: " + (e?.message || e), "error", "del-fail");
+        } finally {
+          overlaySafe(false, "delete");
         }
       }
 
@@ -876,30 +915,6 @@
           console.warn(error);
           toast("Não salvou no cloud: " + error.message, "error", "qty-fail");
           try { await loadItems(currentInventoryId); } catch {}
-        }
-      }
-
-      async function deleteItem(it) {
-        if (!it?.id) return;
-        if (!confirm(`Excluir "${it.name}"?`)) return;
-
-        // otimista
-        const prev = items;
-        items = items.filter(x => x.id !== it.id);
-        renderItems();
-
-        const { error } = await supabase
-          .from("inventory_items")
-          .delete()
-          .eq("id", it.id)
-          .eq("inventory_id", currentInventoryId);
-
-        if (error) {
-          items = prev;
-          renderItems();
-          toast("Falha ao excluir: " + error.message, "error", "del-fail");
-        } else {
-          toast("Excluído ✅", "success", "del-ok");
         }
       }
 
@@ -1110,7 +1125,6 @@
           toast("Não consegui copiar.", "error", "copy-fail");
         }
       };
-      $("copyInvBtn").onclick = () => $("invCodeShow").click();
 
       $("add").onclick = () => upsertItem();
       $("cancelEdit").onclick = () => resetEdit();
@@ -1134,7 +1148,6 @@
           essentialFilter === "essential" ? "Essenciais: só essenciais" :
           "Essenciais: só não essenciais";
 
-        // ✅ garante atualizar sempre (inclusive após realtime)
         renderItems();
       };
 
@@ -1142,7 +1155,38 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ========= AUTH STATE (SEM “TROCA ABA = LOADING”) =========
+      // ===== Admin modal =====
+      function openAdmin() { $("adminBackdrop").classList.add("on"); }
+      function closeAdmin() { $("adminBackdrop").classList.remove("on"); }
+      $("adminBtn").onclick = openAdmin;
+      $("adminClose").onclick = closeAdmin;
+      $("adminBackdrop").addEventListener("click", (e) => {
+        if (e.target === $("adminBackdrop")) closeAdmin();
+      });
+
+      $("adminReload").onclick = async () => {
+        if (!currentInventoryId) return;
+        overlaySafe(true, "admin-reload");
+        try {
+          await Promise.all([ loadItems(currentInventoryId), loadMembers(currentInventoryId) ]);
+          toast("Recarregado ✅", "success", "admin-reload");
+        } finally {
+          overlaySafe(false, "admin-reload");
+        }
+      };
+
+      $("adminResub").onclick = async () => {
+        if (!currentInventoryId) return;
+        overlaySafe(true, "admin-resub");
+        try {
+          await startRealtime(currentInventoryId);
+          toast("Tempo real reconectado ✅", "success", "admin-resub");
+        } finally {
+          overlaySafe(false, "admin-resub");
+        }
+      };
+
+      // ========= AUTH STATE (sem bug de troca aba) =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -1187,13 +1231,15 @@
         }
       })();
 
-      // Offline/Online UI
+      // Offline/Online
       window.addEventListener("offline", () => {
-        setOnlineUI(false);
+        $("onlineText").textContent = "offline";
+        $("onlineDot").classList.remove("on");
         toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline");
       });
       window.addEventListener("online", () => {
-        setOnlineUI(true);
+        $("onlineText").textContent = "online";
+        $("onlineDot").classList.add("on");
         toast("Conexão voltou ✅", "success", "online");
       });
     });
