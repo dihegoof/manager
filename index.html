@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Inventário da Casa</title>
   <link rel="stylesheet" href="css/style.css">
+
+  <!-- ✅ PATCH anti-bug “puxar pra baixo e sumir tudo” (mobile/overscroll) -->
+  <style>
+    html, body { min-height: 100%; }
+    html { background: var(--bg, #f6fbff); overscroll-behavior-y: none; }
+    body { background: var(--bg, #f6fbff); }
+  </style>
 </head>
 
 <body>
@@ -71,55 +78,52 @@
 
   <!-- ===== APP ===== -->
   <div id="appView" class="wrap hidden">
-    <!-- Banner (topo) -->
-    <div class="banner-card">
-      <div class="banner-title">inventário de casa</div>
-    </div>
+    <div class="card">
+      <!-- ✅ TOPO iOS (online + admin + sair + código) -->
+      <div class="row header-row">
+        <h1 class="title" style="margin:0;">Inventário da Casa</h1>
 
-    <!-- Top row: painel perfil + bloco código -->
-    <div class="top-grid">
-      <!-- Painel perfil (direita no desktop, empilha no mobile) -->
-      <div class="card profile-card">
-        <div class="profile-top">
-          <div class="online-line">
-            <span class="dot-online" id="onlineDot" title="Status"></span>
-            <span class="online-text" id="onlineText">online</span>
-          </div>
+        <div class="row" style="gap:8px; align-items:center;">
+          <span id="onlinePill" class="pill good" style="display:inline-flex; align-items:center; gap:8px;">
+            <span id="onlineDot" style="width:10px;height:10px;border-radius:999px;background:rgba(34,197,94,.85);display:inline-block;"></span>
+            <span id="onlineText">online</span>
+          </span>
 
-          <div class="profile-actions">
-            <button id="adminBtn" class="icon-btn hidden" title="Admin">🛠️</button>
-            <button id="logoutBtn" class="small">Sair</button>
-          </div>
-        </div>
-
-        <div class="muted" style="margin-top:8px;">
-          Código do inventário:
-          <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="muted">
-          Seu cargo:
-          <span id="myRolePill" class="pill" title="Seu cargo">—</span>
+          <button id="adminBtn" class="small hidden" title="Admin">🛠️</button>
+          <button id="logoutBtn" class="small">Sair</button>
         </div>
       </div>
 
-      <!-- Buscar (separado) -->
-      <div class="card search-card">
-        <div class="section-h">Buscar</div>
-        <div class="row" style="margin-top:10px;">
-          <input id="search" placeholder="Buscar item" />
-        </div>
+      <div class="muted" style="margin-top:6px;">
+        Código do inventário:
+        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
       </div>
-    </div>
 
-    <!-- Itens -->
-    <div class="card items-card">
-      <div class="section-h">Itens</div>
+      <div class="divider"></div>
+
+      <!-- MEMBERS -->
+      <div id="membersBox">
+        <div class="row header-row" style="align-items:flex-end;">
+          <div>
+            <div style="font-weight:900;">Membros</div>
+            <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
+          </div>
+          <div class="pill" id="myRolePill" title="Seu cargo">—</div>
+        </div>
+        <div id="membersList" class="list" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- SEARCH -->
+      <div class="row">
+        <input id="search" placeholder="Buscar item" />
+      </div>
+
+      <div class="divider"></div>
 
       <!-- ADD / EDIT -->
-      <div class="row" style="margin-top:10px;">
+      <div class="row">
         <input id="name" placeholder="Novo item:" />
         <select id="unit">
           <option value="un">un</option>
@@ -128,23 +132,16 @@
           <option value="ml">ml</option>
           <option value="l">l</option>
         </select>
-      </div>
-
-      <div class="row mt10">
         <input id="qty" type="number" step="0.1" placeholder="Qtd" class="w120" />
         <input id="min" type="number" step="0.1" placeholder="Mín" class="w120" />
-      </div>
 
-      <div class="row mt10" style="align-items:center; justify-content:space-between;">
-        <label class="checkline ios-check">
+        <label class="checkline" style="align-items:center; gap:8px;">
           <input id="essential" type="checkbox" />
           Essencial
         </label>
 
-        <div class="row" style="gap:8px;">
-          <button id="add">Adicionar</button>
-          <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
-        </div>
+        <button id="add">Adicionar</button>
+        <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
       </div>
 
       <div class="muted" id="editHint" style="margin-top:8px;">
@@ -165,35 +162,24 @@
       <div class="list" id="list"></div>
     </div>
 
-    <!-- Membros no rodapé -->
-    <div class="card members-card">
-      <div class="section-h">Membros</div>
-      <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
-      <div id="membersList" class="list" style="margin-top:10px;"></div>
-    </div>
-  </div>
+    <!-- ✅ ADMIN MODAL (fica DENTRO do appView => nunca aparece deslogado) -->
+    <div id="adminBackdrop" class="modal-backdrop">
+      <div class="modal">
+        <div class="section-title">Admin</div>
+        <div class="muted" style="margin-top:6px;">Manutenção do inventário atual.</div>
 
-  <!-- Admin modal (seguro: só ações locais/itens do inventário, NÃO dropa schema) -->
-  <div id="adminBackdrop" class="modal-backdrop">
-    <div class="modal">
-      <div class="section-h">Admin</div>
-      <div class="muted" style="margin-top:6px;">
-        Painel de manutenção do inventário atual.
-      </div>
+        <div class="divider"></div>
 
-      <div class="divider"></div>
+        <div class="row" style="justify-content:flex-end;">
+          <button id="adminReload" class="small">Recarregar</button>
+          <button id="adminResub" class="small">Reconectar RT</button>
+          <button id="adminClose" class="small ghost">Fechar</button>
+        </div>
 
-      <div class="row" style="gap:10px; justify-content:flex-start;">
-        <button id="adminReload" class="small">Recarregar</button>
-        <button id="adminResub" class="small">Reconectar tempo real</button>
-        <button id="adminClose" class="small ghost">Fechar</button>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="muted">
-        ⚠️ Não incluí botão de “dropar tabelas/functions/policies” porque isso é perigoso (um clique e você perde o banco).
-        Se você quiser resetar o banco, faz via SQL no Supabase com script controlado.
+        <div class="divider"></div>
+        <div class="muted">
+          Obs.: “dropar schema/tabelas/functions/policies” não fica no front por segurança.
+        </div>
       </div>
     </div>
   </div>
@@ -322,6 +308,7 @@
         $("registerForm").classList.add("hidden");
         $("authView").classList.remove("hidden");
         $("appView").classList.add("hidden");
+        closeAdmin();
         $("authView").classList.add("fade-in");
       }
       function showRegister() {
@@ -330,6 +317,7 @@
         $("registerForm").classList.remove("hidden");
         $("authView").classList.remove("hidden");
         $("appView").classList.add("hidden");
+        closeAdmin();
         syncRegisterUI();
         $("authView").classList.add("fade-in");
       }
@@ -343,6 +331,14 @@
         $("invCode").disabled = gen;
         if (gen) $("invCode").value = "";
       }
+
+      // ========= ADMIN MODAL =========
+      function openAdmin() { $("adminBackdrop").classList.add("on"); }
+      function closeAdmin() { $("adminBackdrop").classList.remove("on"); }
+      $("adminClose").onclick = closeAdmin;
+      $("adminBackdrop").addEventListener("click", (e) => {
+        if (e.target === $("adminBackdrop")) closeAdmin();
+      });
 
       // ========= STATE =========
       let currentUser = null;
@@ -477,40 +473,29 @@
           const controls = document.createElement("div");
           controls.className = "controls";
 
-          // ✅ ordem iOS que você pediu: + <quant> - ⚙️ ℹ️ 🗑️
-          const plus = document.createElement("button");
-          plus.className = "icon-btn";
-          plus.textContent = "+";
-          plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
-
-          const qty = document.createElement("div");
-          qty.className = "qty pill";
-          qty.textContent = `${it.qty} ${it.unit}`;
-
           const minus = document.createElement("button");
-          minus.className = "icon-btn";
           minus.textContent = "−";
           minus.onclick = () => changeQty(it.id, it.unit === "un" ? -1 : -0.1);
 
           const edit = document.createElement("button");
-          edit.className = "icon-btn";
           edit.textContent = "⚙️";
           edit.title = "Editar";
           edit.onclick = () => startEdit(it);
 
           const info = document.createElement("button");
-          info.className = "icon-btn";
           info.textContent = "ℹ️";
           info.title = "Info / histórico";
           info.onclick = () => showInfo(it);
 
-          const del = document.createElement("button");
-          del.className = "icon-btn danger-btn";
-          del.textContent = "🗑️";
-          del.title = "Excluir";
-          del.onclick = () => deleteItem(it.id, it.name);
+          const qty = document.createElement("div");
+          qty.className = "qty pill";
+          qty.textContent = `${it.qty} ${it.unit}`;
 
-          controls.append(plus, qty, minus, edit, info, del);
+          const plus = document.createElement("button");
+          plus.textContent = "+";
+          plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
+
+          controls.append(minus, edit, info, qty, plus);
           row.append(left, controls);
           list.appendChild(row);
         }
@@ -612,15 +597,17 @@
           "load members"
         );
         if (error) throw error;
+
         members = Array.isArray(data) ? data : [];
         renderMembers();
 
         const me = members.find(m => m.user_id === currentUser.id);
         $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
 
-        // ✅ mostra admin só pra owner
+        // ✅ admin só owner
         const isOwner = me?.role === "owner";
         $("adminBtn").classList.toggle("hidden", !isOwner);
+        if (!isOwner) closeAdmin();
       }
 
       async function stopRealtime() {
@@ -673,7 +660,9 @@
 
             const me = members.find(m => m.user_id === currentUser.id);
             $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
-            $("adminBtn").classList.toggle("hidden", me?.role !== "owner");
+            const isOwner = me?.role === "owner";
+            $("adminBtn").classList.toggle("hidden", !isOwner);
+            if (!isOwner) closeAdmin();
           })
           .subscribe();
       }
@@ -688,8 +677,6 @@
           await Promise.all([ loadItems(invId), loadMembers(invId) ]);
           await startRealtime(invId);
           toast("Sincronizado ✅", "success", "synced");
-          $("onlineText").textContent = "online";
-          $("onlineDot").classList.add("on");
         } finally {
           overlaySafe(false, "boot");
         }
@@ -782,6 +769,7 @@
 
         if (error) console.warn("last_seen update:", error.message);
       }
+
       setInterval(() => { pingLastSeen(); }, 60_000);
       window.addEventListener("focus", () => { pingLastSeen(); });
       document.addEventListener("visibilitychange", () => {
@@ -869,29 +857,6 @@
           toast("Falha ao salvar: " + (e?.message || e), "error", "save-fail");
         } finally {
           overlaySafe(false, "upsert-item");
-        }
-      }
-
-      async function deleteItem(itemId, itemName) {
-        if (!confirm(`Excluir "${itemName}"?`)) return;
-
-        overlaySafe(true, "delete");
-        try {
-          const { error } = await withTimeout(
-            supabase.from("inventory_items")
-              .delete()
-              .eq("id", itemId)
-              .eq("inventory_id", currentInventoryId),
-            9000,
-            "delete item"
-          );
-          if (error) throw error;
-          toast("Excluído ✅", "success", "del-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Falha ao excluir: " + (e?.message || e), "error", "del-fail");
-        } finally {
-          overlaySafe(false, "delete");
         }
       }
 
@@ -1014,6 +979,24 @@
       $("backToLoginBtn").onclick = () => showLogin();
       $("genInv").addEventListener("change", syncRegisterUI);
 
+      $("adminBtn").onclick = () => openAdmin();
+      $("adminReload").onclick = async () => {
+        if (!currentInventoryId) return;
+        overlaySafe(true, "adminReload");
+        try {
+          await Promise.all([loadItems(currentInventoryId), loadMembers(currentInventoryId)]);
+          toast("Recarregado ✅", "success", "admin-reload");
+        } finally { overlaySafe(false, "adminReload"); }
+      };
+      $("adminResub").onclick = async () => {
+        if (!currentInventoryId) return;
+        overlaySafe(true, "adminResub");
+        try {
+          await startRealtime(currentInventoryId);
+          toast("RT reconectado ✅", "success", "admin-resub");
+        } finally { overlaySafe(false, "adminResub"); }
+      };
+
       $("loginBtn").onclick = async () => {
         const email = $("loginEmail").value.trim();
         const password = $("loginPass").value;
@@ -1101,6 +1084,7 @@
       $("logoutBtn").onclick = async () => {
         overlaySafe(true, "logout");
         try {
+          closeAdmin();
           await stopRealtime();
           await supabase.auth.signOut();
           currentUser = null;
@@ -1108,6 +1092,7 @@
           items = [];
           members = [];
           resetEdit();
+          $("adminBtn").classList.add("hidden");
           showLogin();
           toast("Saiu.", "warn", "logout");
         } finally {
@@ -1155,50 +1140,21 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ===== Admin modal =====
-      function openAdmin() { $("adminBackdrop").classList.add("on"); }
-      function closeAdmin() { $("adminBackdrop").classList.remove("on"); }
-      $("adminBtn").onclick = openAdmin;
-      $("adminClose").onclick = closeAdmin;
-      $("adminBackdrop").addEventListener("click", (e) => {
-        if (e.target === $("adminBackdrop")) closeAdmin();
-      });
-
-      $("adminReload").onclick = async () => {
-        if (!currentInventoryId) return;
-        overlaySafe(true, "admin-reload");
-        try {
-          await Promise.all([ loadItems(currentInventoryId), loadMembers(currentInventoryId) ]);
-          toast("Recarregado ✅", "success", "admin-reload");
-        } finally {
-          overlaySafe(false, "admin-reload");
-        }
-      };
-
-      $("adminResub").onclick = async () => {
-        if (!currentInventoryId) return;
-        overlaySafe(true, "admin-resub");
-        try {
-          await startRealtime(currentInventoryId);
-          toast("Tempo real reconectado ✅", "success", "admin-resub");
-        } finally {
-          overlaySafe(false, "admin-resub");
-        }
-      };
-
-      // ========= AUTH STATE (sem bug de troca aba) =========
+      // ========= AUTH STATE =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
         if (booting) return;
 
         if (!session?.user) {
+          closeAdmin();
           await stopRealtime();
           currentUser = null;
           currentInventoryId = null;
           items = [];
           members = [];
           resetEdit();
+          $("adminBtn").classList.add("hidden");
           showLogin();
           return;
         }
@@ -1219,6 +1175,24 @@
       // ========= FIRST PAINT =========
       (async () => {
         try {
+          // online pill
+          function setOnline(on) {
+            $("onlineText").textContent = on ? "online" : "offline";
+            $("onlineDot").style.background = on ? "rgba(34,197,94,.85)" : "rgba(239,68,68,.75)";
+            $("onlinePill").classList.toggle("good", !!on);
+            $("onlinePill").classList.toggle("danger", !on);
+          }
+          setOnline(navigator.onLine);
+
+          window.addEventListener("offline", () => {
+            setOnline(false);
+            toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline");
+          });
+          window.addEventListener("online", () => {
+            setOnline(true);
+            toast("Conexão voltou ✅", "success", "online");
+          });
+
           const session = await getSession();
           if (!session?.user) return showLogin();
 
@@ -1230,18 +1204,6 @@
           showLogin();
         }
       })();
-
-      // Offline/Online
-      window.addEventListener("offline", () => {
-        $("onlineText").textContent = "offline";
-        $("onlineDot").classList.remove("on");
-        toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline");
-      });
-      window.addEventListener("online", () => {
-        $("onlineText").textContent = "online";
-        $("onlineDot").classList.add("on");
-        toast("Conexão voltou ✅", "success", "online");
-      });
     });
   </script>
 </body>
