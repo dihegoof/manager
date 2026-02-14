@@ -144,10 +144,10 @@
 
       <div class="list" id="list"></div>
     </div>
-
-    <!-- ✅ Footer movido pra DENTRO do app (pra rolar junto e não ficar “sozinho”) -->
-    <footer id="footer" class="footer"></footer>
   </div>
+
+  <!-- Footer -->
+  <footer id="footer" class="footer"></footer>
 
   <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -592,12 +592,7 @@
             }
             renderItems();
           })
-          .subscribe((status) => {
-            console.log("[realtime items]", status);
-            if (status === "SUBSCRIBED") toast("Tempo real ativo ✅", "success", "rt-items-ok");
-            if (status === "CHANNEL_ERROR") toast("Falha no tempo real (itens).", "warn", "rt-items-err");
-            if (status === "TIMED_OUT") toast("Tempo real demorou pra conectar (itens).", "warn", "rt-items-timeout");
-          });
+          .subscribe();
 
         realtimeMembers = supabase
           .channel("rt-members-" + invId)
@@ -620,10 +615,7 @@
             const me = members.find(m => m.user_id === currentUser.id);
             $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
           })
-          .subscribe((status) => {
-            console.log("[realtime members]", status);
-            if (status === "CHANNEL_ERROR") toast("Falha no tempo real (membros).", "warn", "rt-mem-err");
-          });
+          .subscribe();
       }
 
       async function bootInventory(invId) {
@@ -641,15 +633,12 @@
         }
       }
 
-      // ✅ BOOT DEFINITIVO (se tiver inv -> entra; se não -> cria; se perdeu acesso -> admin)
       async function bootFromProfile() {
         if (!currentUser) return;
 
-        // 1) tenta finalizar pending (se houver)
         const did = await finalizePendingIfAny();
         if (did) return;
 
-        // 2) profile
         const { data: prof, error } = await withTimeout(
           supabase.from("profiles")
             .select("current_inventory_id, display_name")
@@ -663,7 +652,6 @@
         const displayName = prof?.display_name || "Usuário";
         const invId = prof?.current_inventory_id || null;
 
-        // 3) sem inventário -> cria automaticamente
         if (!invId) {
           overlaySafe(true, "auto-create-inv");
           try {
@@ -695,7 +683,6 @@
           }
         }
 
-        // 4) tem inventário -> tenta abrir; se permission -> admin
         try {
           await bootInventory(invId);
           return;
@@ -1181,6 +1168,7 @@
         }
       })();
 
+      // Offline/Online
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
     });
