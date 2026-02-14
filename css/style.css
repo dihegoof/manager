@@ -25,18 +25,32 @@
 html{
   height: 100%;
   background: var(--bg);
-  overscroll-behavior-y: none; /* evita “puxar e sumir” em alguns Android */
+
+  /* ✅ trava o “pull-to-refresh / rubber band” no root */
+  overscroll-behavior-y: none;
 }
 
 body{
   margin:0;
-  min-height: 100%;
+
+  /* ✅ corpo vira “tela fixa” e nunca “encolhe/some” */
+  height: 100vh;
+  height: 100dvh; /* Android moderno */
+
   display:flex;
   flex-direction: column;
+
+  /* ✅ IMPORTANTÍSSIMO: body não rola */
+  overflow: hidden;
+
   background: radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
               radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
               var(--bg);
   color: var(--text);
+
+  /* ✅ estabiliza camadas quando tem backdrop-filter */
+  position: relative;
+  isolation: isolate;
 }
 
 /* util */
@@ -44,7 +58,6 @@ body{
 .mt10{ margin-top:10px; }
 .mt12{ margin-top:12px; }
 .w120{ max-width:120px; }
-
 .copy{ cursor: pointer; user-select: none; }
 
 /* layout */
@@ -55,6 +68,23 @@ body{
   padding: 16px;
 }
 
+/* ✅ O APP (quando logado) vira o scroller */
+.app-scroll{
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+
+  /* ✅ evita bounce que “quebra” o layout */
+  overscroll-behavior: contain;
+
+  /* ✅ não “puxa” a página inteira */
+  touch-action: pan-y;
+
+  /* espaço pro footer */
+  padding-bottom: 90px;
+}
+
+/* cards */
 .card{
   background: var(--card);
   border: 1px solid rgba(255,255,255,.55);
@@ -226,11 +256,16 @@ button.ghost{
 /* auth center */
 .center-screen{
   flex: 1;
-  min-height: calc(100vh - 60px);
+  min-height: 100%;
   display:flex;
   align-items:center;
   justify-content:center;
   padding: 16px;
+
+  /* ✅ auth pode rolar sozinho se teclado empurrar */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .login-card{
@@ -345,6 +380,11 @@ button.ghost{
   color: rgba(91,107,133,.92);
   padding: 16px 10px 22px;
   opacity: .9;
+
+  /* ✅ footer fixado visualmente sem “sumir” */
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
 }
 .footer a{
   color: #0b3a52;
@@ -362,7 +402,7 @@ button.ghost{
   display:none;
   align-items:center;
   justify-content:center;
-  z-index: 30000;  /* ✅ acima do app */
+  z-index: 30000;
   padding: 16px;
 }
 .modal-backdrop.on{ display:flex; }
@@ -393,7 +433,6 @@ button.ghost{
 
   .w120{ max-width: 100%; flex: 1; }
 
-  /* ✅ item vira “duas linhas”: texto em cima, controles em baixo */
   .item{
     flex-direction: column;
     align-items: stretch;
