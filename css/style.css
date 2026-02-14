@@ -3,6 +3,7 @@
 
   --bg: #f3f7ff;
   --card: rgba(255,255,255,.92);
+  --card-2: rgba(255,255,255,.82);
   --text: #0b1220;
   --muted: #5b6b85;
   --line: rgba(11,18,32,.10);
@@ -24,35 +25,18 @@
 html{
   height: 100%;
   background: var(--bg);
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: none; /* evita “puxar e sumir” em alguns Android */
 }
 
 body{
   margin:0;
-  min-height: 100vh;
+  min-height: 100%;
   display:flex;
   flex-direction: column;
+  background: radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
+              radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
+              var(--bg);
   color: var(--text);
-  background: var(--bg);
-  overflow-x: hidden;
-}
-
-/* ✅ fundo fixo SEM bug de scroll */
-body::before{
-  content:"";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
-    radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
-    var(--bg);
-}
-
-/* ✅ estabiliza as telas */
-#authView, #appView{
-  position: relative;
-  z-index: 1;
 }
 
 /* util */
@@ -60,6 +44,7 @@ body::before{
 .mt10{ margin-top:10px; }
 .mt12{ margin-top:12px; }
 .w120{ max-width:120px; }
+
 .copy{ cursor: pointer; user-select: none; }
 
 /* layout */
@@ -68,8 +53,6 @@ body::before{
   width: 100%;
   margin: 0 auto;
   padding: 16px;
-  /* ajuda o Chrome Android a não “apagar” a camada */
-  transform: translateZ(0);
 }
 
 .card{
@@ -78,7 +61,7 @@ body::before{
   border-radius: var(--radius);
   padding: 14px;
   box-shadow: var(--shadow);
-  /* ❌ backdrop-filter removido (causa sumiço no scroll em alguns Android) */
+  backdrop-filter: blur(10px);
 }
 
 .title{
@@ -103,7 +86,7 @@ body::before{
 input, select, button{
   border-radius: var(--radius-2);
   border: 1px solid rgba(11,18,32,.10);
-  background: rgba(255,255,255,.94);
+  background: rgba(255,255,255,.90);
   color: var(--text);
   padding: 12px 12px;
   font-size: 14px;
@@ -171,9 +154,8 @@ button.ghost{
   padding: 12px 12px;
   border: 1px solid rgba(11,18,32,.10);
   border-radius: 16px;
-  background: rgba(255,255,255,.94);
+  background: rgba(255,255,255,.92);
   box-shadow: 0 10px 26px rgba(16,24,40,.06);
-  transform: translateZ(0);
 }
 
 .name{
@@ -265,7 +247,7 @@ button.ghost{
   align-items:center;
   justify-content:center;
   background: rgba(0,0,0,.20);
-  /* ❌ backdrop-filter removido aqui também */
+  backdrop-filter: blur(2px);
   opacity:0;
   pointer-events:none;
   transition: opacity .18s ease;
@@ -290,7 +272,7 @@ button.ghost{
   to{ opacity:1; transform:none; }
 }
 
-/* toast */
+/* ===== toast ===== */
 .toast-container{
   position: fixed;
   top: 12px;
@@ -321,13 +303,13 @@ button.ghost{
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid rgba(11,18,32,.10);
-  background: rgba(255,255,255,.94);
+  background: rgba(255,255,255,.92);
   box-shadow: 0 16px 40px rgba(16,24,40,.14);
   font-weight: 800;
   font-size: 13px;
   position: relative;
   line-height: 1.25;
-  /* ❌ backdrop-filter removido */
+  backdrop-filter: blur(10px);
 }
 
 .toast-bubble::after{
@@ -370,33 +352,6 @@ button.ghost{
   font-weight: 900;
 }
 .footer a:hover{ text-decoration: underline; }
-
-/* modal/admin (mantém, mas sem blur) */
-.modal-backdrop{
-  position: fixed;
-  inset: 0;
-  background: rgba(10,20,35,.28);
-  display:none;
-  align-items:center;
-  justify-content:center;
-  z-index: 30000;
-  padding: 16px;
-}
-.modal-backdrop.on{ display:flex; }
-
-.modal{
-  width: min(560px, 100%);
-  background: rgba(255,255,255,.94);
-  border: 1px solid rgba(11,18,32,.10);
-  border-radius: var(--radius);
-  padding: 14px;
-  box-shadow: 0 24px 70px rgba(16,24,40,.22);
-}
-
-.section-title{
-  font-weight: 900;
-  margin: 0 0 6px;
-}
 
 /* responsive */
 @media (max-width: 540px){
