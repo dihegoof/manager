@@ -161,44 +161,16 @@
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
-    // ========= READY =========
     const ready = (fn) => (document.readyState === "loading"
       ? document.addEventListener("DOMContentLoaded", fn, { once: true })
       : fn());
 
     ready(() => {
-      // ========= HELPERS =========
       const $ = (id) => document.getElementById(id);
 
-      // ✅ marca containers pra CSS fix (não muda layout)
-      $("appView")?.classList.add("app-scroll");
-      $("authView")?.classList.add("auth-scroll");
-
-      // ✅ FIX: bloqueia “puxar pra baixo” no topo (Xiaomi/Chrome) sem travar o scroll normal
-      function blockPullToRefresh(el) {
-        if (!el) return;
-
-        let startY = 0;
-
-        el.addEventListener("touchstart", (e) => {
-          if (!e.touches || !e.touches.length) return;
-          startY = e.touches[0].clientY;
-        }, { passive: true });
-
-        el.addEventListener("touchmove", (e) => {
-          if (!e.touches || !e.touches.length) return;
-          const y = e.touches[0].clientY;
-          const dy = y - startY;
-
-          // se estiver no topo e puxou pra baixo -> bloqueia o gesto que buga repaint
-          if (el.scrollTop <= 0 && dy > 0) {
-            e.preventDefault();
-          }
-        }, { passive: false });
-      }
-
-      blockPullToRefresh($("appView"));
-      blockPullToRefresh($("authView"));
+      // ✅ SCROLL TANK: scroll só dentro das views (evita bug Xiaomi/Chrome “sumir tudo”)
+      $("appView")?.classList.add("view-scroll");
+      $("authView")?.classList.add("view-scroll");
 
       const norm = (s) => (s || "")
         .toString()
@@ -304,6 +276,7 @@
         $("authView").classList.remove("hidden");
         $("appView").classList.add("hidden");
         $("authView").classList.add("fade-in");
+        $("authView").scrollTop = 0; // ✅ reseta scroll interno
       }
       function showRegister() {
         $("authTitle").textContent = "Registrar";
@@ -313,11 +286,13 @@
         $("appView").classList.add("hidden");
         syncRegisterUI();
         $("authView").classList.add("fade-in");
+        $("authView").scrollTop = 0; // ✅
       }
       function showApp() {
         $("authView").classList.add("hidden");
         $("appView").classList.remove("hidden");
         $("appView").classList.add("fade-in");
+        $("appView").scrollTop = 0; // ✅
       }
       function syncRegisterUI() {
         const gen = $("genInv").checked;
@@ -784,7 +759,7 @@
         $("cancelEdit").classList.remove("hidden");
         $("add").textContent = "Salvar";
         $("editHint").textContent = "Editando item — altere os campos e clique em Salvar.";
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        $("appView").scrollTo({ top: 0, behavior: "smooth" }); // ✅ scroll interno
       }
 
       async function upsertItem() {
@@ -924,7 +899,6 @@
         }
       }
 
-      // ========= EXPORT / IMPORT / CLEAR =========
       function exportText() {
         const lines = items
           .slice()
@@ -1015,7 +989,6 @@
         }
       }
 
-      // ========= UI EVENTS =========
       $("openRegisterBtn").onclick = () => showRegister();
       $("backToLoginBtn").onclick = () => showLogin();
       $("genInv").addEventListener("change", syncRegisterUI);
@@ -1161,7 +1134,6 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ========= AUTH STATE =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -1191,7 +1163,6 @@
         }
       });
 
-      // ========= FIRST PAINT =========
       (async () => {
         try {
           const session = await getSession();
