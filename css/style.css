@@ -25,29 +25,18 @@
 html{
   height: 100%;
   background: var(--bg);
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: none; /* evita “puxar e sumir” em alguns Android */
 }
 
 body{
   margin:0;
-  height: 100vh;        /* ✅ trava viewport */
-  overflow: hidden;     /* ✅ BODY NÃO ROLA (bug Xiaomi some) */
+  min-height: 100%;
+  display:flex;
+  flex-direction: column;
+  background: radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
+              radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
+              var(--bg);
   color: var(--text);
-  background: var(--bg);
-  position: relative;
-}
-
-/* ✅ gradiente vai numa camada fixa (não quebra repaint no scroll) */
-body::before{
-  content:"";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
-    radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
-    var(--bg);
-  z-index: -1;
 }
 
 /* util */
@@ -58,16 +47,6 @@ body::before{
 
 .copy{ cursor: pointer; user-select: none; }
 
-/* ✅ SCROLL TANK: as views rolam, não o body */
-.view-scroll{
-  position: fixed;
-  inset: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  padding-bottom: 84px; /* ✅ espaço pro footer fixo */
-}
-
 /* layout */
 .wrap{
   max-width: 920px;
@@ -77,12 +56,12 @@ body::before{
 }
 
 .card{
-  background: rgba(255,255,255,.92);
+  background: var(--card);
   border: 1px solid rgba(255,255,255,.55);
   border-radius: var(--radius);
   padding: 14px;
   box-shadow: var(--shadow);
-  /* backdrop-filter REMOVIDO no Android por segurança (gatilho do sumiço) */
+  backdrop-filter: blur(10px);
 }
 
 .title{
@@ -103,6 +82,7 @@ body::before{
   align-items:center;
 }
 
+/* inputs */
 input, select, button{
   border-radius: var(--radius-2);
   border: 1px solid rgba(11,18,32,.10);
@@ -146,6 +126,13 @@ button.ghost{
   box-shadow: none;
 }
 
+/* ✅ admin icon button */
+#adminBtn{
+  min-width: 44px;
+  padding: 9px 12px;
+}
+
+/* filtro ativo */
 #filterList.active{
   background: linear-gradient(180deg, rgba(42,169,255,.22), rgba(42,169,255,.08));
   border-color: rgba(42,169,255,.40);
@@ -157,7 +144,7 @@ button.ghost{
   margin-top: 8px;
 }
 
-/* list */
+/* list items */
 .list{
   margin-top: 14px;
   display:flex;
@@ -192,6 +179,7 @@ button.ghost{
   gap: 6px;
 }
 
+/* controls */
 .controls{
   display:flex;
   align-items:center;
@@ -234,14 +222,17 @@ button.ghost{
   color: #146b33;
 }
 
+/* divider */
 .divider{
   height: 1px;
   background: rgba(11,18,32,.10);
   margin: 12px 0;
 }
 
-/* auth */
+/* auth center */
 .center-screen{
+  flex: 1;
+  min-height: calc(100vh - 60px);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -254,7 +245,7 @@ button.ghost{
   padding: 16px;
 }
 
-/* overlay */
+/* overlay loading */
 .overlay{
   position: fixed;
   inset: 0;
@@ -262,6 +253,7 @@ button.ghost{
   align-items:center;
   justify-content:center;
   background: rgba(0,0,0,.20);
+  backdrop-filter: blur(2px);
   opacity:0;
   pointer-events:none;
   transition: opacity .18s ease;
@@ -286,7 +278,7 @@ button.ghost{
   to{ opacity:1; transform:none; }
 }
 
-/* toast */
+/* ===== toast ===== */
 .toast-container{
   position: fixed;
   top: 12px;
@@ -323,6 +315,7 @@ button.ghost{
   font-size: 13px;
   position: relative;
   line-height: 1.25;
+  backdrop-filter: blur(10px);
 }
 
 .toast-bubble::after{
@@ -351,20 +344,13 @@ button.ghost{
   background: rgba(245,158,11,.12);
 }
 
-/* ✅ footer fixo embaixo (não depende do scroll do body) */
+/* footer */
 .footer{
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
   text-align: center;
   font-size: 12px;
   color: rgba(91,107,133,.92);
-  padding: 10px 10px 12px;
-  background: rgba(243,247,255,.72);
-  border-top: 1px solid rgba(11,18,32,.08);
-  backdrop-filter: none;
-  z-index: 15000;
+  padding: 16px 10px 22px;
+  opacity: .9;
 }
 .footer a{
   color: #0b3a52;
@@ -373,15 +359,16 @@ button.ghost{
 }
 .footer a:hover{ text-decoration: underline; }
 
-/* modal */
+/* ===== modal / admin (FIX) ===== */
 .modal-backdrop{
   position: fixed;
   inset: 0;
   background: rgba(10,20,35,.28);
+  backdrop-filter: blur(6px);
   display:none;
   align-items:center;
   justify-content:center;
-  z-index: 30000;
+  z-index: 30000;  /* ✅ acima do app */
   padding: 16px;
 }
 .modal-backdrop.on{ display:flex; }
@@ -393,6 +380,9 @@ button.ghost{
   border-radius: var(--radius);
   padding: 14px;
   box-shadow: 0 24px 70px rgba(16,24,40,.22);
+  backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 30001;
 }
 
 .section-title{
@@ -409,6 +399,7 @@ button.ghost{
 
   .w120{ max-width: 100%; flex: 1; }
 
+  /* ✅ item vira “duas linhas”: texto em cima, controles em baixo */
   .item{
     flex-direction: column;
     align-items: stretch;
@@ -419,5 +410,7 @@ button.ghost{
     justify-content: flex-end;
   }
 
-  .qty{ min-width: 72px; }
+  .qty{
+    min-width: 72px;
+  }
 }
