@@ -437,4 +437,43 @@ button.ghost{
   .qty{
     min-width: 72px;
   }
+
+/* ===== FIX DEFINITIVO: não usar scroll no body (Chrome Android/Xiaomi) ===== */
+html, body{
+  height: 100%;
+}
+
+body{
+  /* o documento não rola mais */
+  overflow: hidden;
+
+  /* viewport estável */
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+/* deixa o container do app rolar */
+#appView{
+  flex: 1 1 auto;
+  min-height: 0;                  /* MUITO importante em layout flex */
+  height: 100svh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* e o auth também (pra telas pequenas) */
+#authView{
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100svh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* footer continua no layout, mas não “puxa” o scroll */
+.footer{
+  flex: 0 0 auto;
+}
 }
