@@ -74,10 +74,7 @@
     <div class="card">
       <div class="row header-row">
         <h1 class="title">Inventário da Casa</h1>
-        <div class="row" style="gap:10px; align-items:center;">
-          <button id="adminBtn" class="small ghost hidden" type="button" title="Painel admin">🛡️</button>
-          <button id="logoutBtn" class="small">Sair</button>
-        </div>
+        <button id="logoutBtn" class="small">Sair</button>
       </div>
 
       <div class="muted" style="margin-top:6px;">
@@ -147,72 +144,9 @@
 
       <div class="list" id="list"></div>
     </div>
-  </div>
 
-  <!-- Footer -->
-  <footer id="footer" class="footer"></footer>
-
-  <!-- ===== ADMIN MODAL ===== -->
-  <div id="adminModal" class="modal-backdrop" aria-hidden="true">
-    <div class="modal">
-      <div class="row header-row">
-        <div>
-          <div class="section-title">Painel Admin</div>
-          <div class="muted">Somente dono do inventário</div>
-        </div>
-        <button id="adminClose" class="small ghost" type="button">Fechar</button>
-      </div>
-
-      <div class="divider"></div>
-
-      <!-- Login admin (local) -->
-      <div id="adminLoginBox">
-        <div class="muted" style="margin-top:0">Entre para liberar ações administrativas.</div>
-
-        <div class="row mt12">
-          <input id="adminUser" placeholder="Usuário" autocomplete="off" />
-        </div>
-        <div class="row mt10">
-          <input id="adminPass" type="password" placeholder="Senha" autocomplete="off" />
-        </div>
-
-        <div class="row mt12" style="justify-content:flex-end;">
-          <button id="adminLoginBtn" class="small" type="button">Entrar</button>
-        </div>
-
-        <div class="muted">
-          Padrão: usuário <b>admin</b> • senha <b>admin000teste</b>
-        </div>
-      </div>
-
-      <!-- Ações -->
-      <div id="adminActionsBox" class="hidden">
-        <div class="muted" style="margin-top:0">
-          Inventário atual: <span class="pill" id="adminInvPill">—</span>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="row" style="gap:10px;">
-          <button id="adminClearItems" class="small" type="button">🧹 Zerar itens (inventário)</button>
-          <button id="adminResetHistory" class="small" type="button">🕓 Resetar histórico (itens)</button>
-          <button id="adminKickMembers" class="small" type="button">👥 Remover membros (exceto eu)</button>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="row" style="justify-content:flex-end;">
-          <button id="adminDangerDeleteInv" class="small" type="button"
-            style="border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.10);">
-            ☠️ Apagar inventário (PERIGOSO)
-          </button>
-        </div>
-
-        <div class="muted">
-          Essas ações rodam no banco via RPC e só funcionam se você for <b>owner</b>.
-        </div>
-      </div>
-    </div>
+    <!-- ✅ Footer movido pra DENTRO do app (pra rolar junto e não ficar “sozinho”) -->
+    <footer id="footer" class="footer"></footer>
   </div>
 
   <script type="module">
@@ -375,10 +309,6 @@
       let essentialFilter = "both"; // both | essential | not
 
       let editItemId = null;
-
-      // ✅ ADMIN STATE
-      let isOwner = false;
-      let adminUnlocked = false;
 
       // pending setup (caso confirm email ON)
       const PENDING_KEY = "pending_inv_setup_v4";
@@ -618,11 +548,6 @@
         renderItems();
       }
 
-      function setAdminVisible() {
-        if (isOwner) $("adminBtn").classList.remove("hidden");
-        else $("adminBtn").classList.add("hidden");
-      }
-
       async function loadMembers(invId) {
         const { data, error } = await withTimeout(
           supabase.from("inventory_members")
@@ -637,10 +562,6 @@
 
         const me = members.find(m => m.user_id === currentUser.id);
         $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
-
-        // ✅ owner -> mostra botão admin
-        isOwner = (me?.role === "owner");
-        setAdminVisible();
       }
 
       async function stopRealtime() {
@@ -698,9 +619,6 @@
 
             const me = members.find(m => m.user_id === currentUser.id);
             $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
-
-            isOwner = (me?.role === "owner");
-            setAdminVisible();
           })
           .subscribe((status) => {
             console.log("[realtime members]", status);
@@ -819,7 +737,7 @@
       setInterval(() => { pingLastSeen(); }, 60_000);
       window.addEventListener("focus", () => { pingLastSeen(); });
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) pingLastSeen(); // ✅ sem overlay aqui
+        if (!document.hidden) pingLastSeen();
       });
 
       // ========= ITEMS CRUD =========
@@ -880,7 +798,6 @@
             );
             if (error) throw error;
 
-            // ✅ atualiza local imediatamente
             items = items.map(x => x.id === data.id ? data : x);
             renderItems();
 
@@ -899,7 +816,6 @@
             );
             if (error) throw error;
 
-            // ✅ insere local imediatamente
             items = [data, ...items.filter(x => x.id !== data.id)];
             renderItems();
 
@@ -925,7 +841,6 @@
 
         const newQty = round(Math.max(0, Number(it.qty || 0) + Number(delta)));
 
-        // otimista
         items = items.map(x => x.id === itemId ? { ...x, qty: newQty } : x);
         renderItems();
 
@@ -956,7 +871,6 @@
         const label = name ? `“${name}”` : "este item";
         if (!confirm(`Excluir ${label}?`)) return;
 
-        // otimista
         const prev = items.slice();
         items = items.filter(x => x.id !== itemId);
         renderItems();
@@ -1076,162 +990,6 @@
         }
       }
 
-      // ========= ADMIN PANEL =========
-      const ADMIN_DEFAULT_USER = "admin";
-      const ADMIN_DEFAULT_PASS = "admin000teste";
-
-      function openAdmin() {
-        if (!$("adminModal")) return;
-        $("adminModal").classList.add("on");
-        $("adminModal").setAttribute("aria-hidden", "false");
-
-        adminUnlocked = false;
-        $("adminLoginBox").classList.remove("hidden");
-        $("adminActionsBox").classList.add("hidden");
-
-        $("adminInvPill").textContent = currentInventoryId ? currentInventoryId.slice(0, 8) + "…" : "—";
-        $("adminUser").value = "";
-        $("adminPass").value = "";
-        $("adminUser").focus();
-      }
-
-      function closeAdmin() {
-        $("adminModal").classList.remove("on");
-        $("adminModal").setAttribute("aria-hidden", "true");
-      }
-
-      $("adminModal").addEventListener("click", (e) => {
-        if (e.target === $("adminModal")) closeAdmin();
-      });
-      $("adminClose").onclick = closeAdmin;
-
-      $("adminBtn").onclick = () => openAdmin();
-
-      $("adminLoginBtn").onclick = async () => {
-        const u = ($("adminUser").value || "").trim();
-        const p = ($("adminPass").value || "").trim();
-
-        if (!u || !p) return toast("Informe usuário e senha.", "warn", "adm-need");
-
-        if (u === ADMIN_DEFAULT_USER && p === ADMIN_DEFAULT_PASS) {
-          adminUnlocked = true;
-          $("adminLoginBox").classList.add("hidden");
-          $("adminActionsBox").classList.remove("hidden");
-          toast("Admin liberado ✅", "success", "adm-ok");
-          return;
-        }
-
-        toast("Credenciais inválidas.", "error", "adm-bad");
-      };
-
-      async function adminEnsure() {
-        if (!adminUnlocked) throw new Error("Faça login no admin primeiro.");
-        if (!currentInventoryId) throw new Error("Sem inventário carregado.");
-        if (!isOwner) throw new Error("Somente owner pode usar o admin.");
-      }
-
-      $("adminClearItems").onclick = async () => {
-        try {
-          await adminEnsure();
-          if (!confirm("Zerar TODOS os itens deste inventário?")) return;
-
-          overlaySafe(true, "admin-clear-items");
-          const { error } = await withTimeout(
-            supabase.rpc("admin_clear_items", { p_inventory_id: currentInventoryId }),
-            12000,
-            "admin_clear_items"
-          );
-          if (error) throw error;
-
-          toast("Itens zerados ✅", "success", "adm-clear-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Admin: " + (e?.message || e), "error", "adm-clear-fail");
-        } finally {
-          overlaySafe(false, "admin-clear-items");
-        }
-      };
-
-      $("adminResetHistory").onclick = async () => {
-        try {
-          await adminEnsure();
-          if (!confirm("Resetar histórico (last_buy/prev_buy/last_zero) de TODOS os itens?")) return;
-
-          overlaySafe(true, "admin-reset-history");
-          const { error } = await withTimeout(
-            supabase.rpc("admin_reset_history", { p_inventory_id: currentInventoryId }),
-            12000,
-            "admin_reset_history"
-          );
-          if (error) throw error;
-
-          toast("Histórico resetado ✅", "success", "adm-hist-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Admin: " + (e?.message || e), "error", "adm-hist-fail");
-        } finally {
-          overlaySafe(false, "admin-reset-history");
-        }
-      };
-
-      $("adminKickMembers").onclick = async () => {
-        try {
-          await adminEnsure();
-          if (!confirm("Remover TODOS os membros (exceto você) deste inventário?")) return;
-
-          overlaySafe(true, "admin-kick");
-          const { error } = await withTimeout(
-            supabase.rpc("admin_kick_members", { p_inventory_id: currentInventoryId }),
-            12000,
-            "admin_kick_members"
-          );
-          if (error) throw error;
-
-          toast("Membros removidos ✅", "success", "adm-kick-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Admin: " + (e?.message || e), "error", "adm-kick-fail");
-        } finally {
-          overlaySafe(false, "admin-kick");
-        }
-      };
-
-      $("adminDangerDeleteInv").onclick = async () => {
-        try {
-          await adminEnsure();
-
-          const confirm1 = confirm("⚠️ Isso vai APAGAR o inventário e tudo dentro. Tem certeza?");
-          if (!confirm1) return;
-          const confirm2 = prompt("Digite APAGAR para confirmar:");
-          if ((confirm2 || "").trim().toUpperCase() !== "APAGAR") return toast("Cancelado.", "warn", "adm-del-cancel");
-
-          overlaySafe(true, "admin-delete-inv");
-          const { error } = await withTimeout(
-            supabase.rpc("admin_delete_inventory", { p_inventory_id: currentInventoryId }),
-            15000,
-            "admin_delete_inventory"
-          );
-          if (error) throw error;
-
-          toast("Inventário apagado.", "warn", "adm-del-ok");
-          closeAdmin();
-
-          await stopRealtime();
-          await supabase.auth.signOut();
-          currentUser = null;
-          currentInventoryId = null;
-          items = [];
-          members = [];
-          resetEdit();
-          showLogin();
-        } catch (e) {
-          console.error(e);
-          toast("Admin: " + (e?.message || e), "error", "adm-del-fail");
-        } finally {
-          overlaySafe(false, "admin-delete-inv");
-        }
-      };
-
       // ========= UI EVENTS =========
       $("openRegisterBtn").onclick = () => showRegister();
       $("backToLoginBtn").onclick = () => showLogin();
@@ -1300,7 +1058,6 @@
             throw error;
           }
 
-          // confirm email ON: não vem session
           if (!data?.session?.user) {
             toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
             showLogin();
@@ -1379,7 +1136,7 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ========= AUTH STATE (SEM “TROCA ABA = LOADING”) =========
+      // ========= AUTH STATE =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -1424,7 +1181,6 @@
         }
       })();
 
-      // Offline/Online (sem “cair da conta”)
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
     });
