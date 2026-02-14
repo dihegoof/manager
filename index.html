@@ -71,44 +71,49 @@
 
   <!-- ===== APP ===== -->
   <div id="appView" class="wrap hidden">
-    <div class="card">
-      <div class="row header-row">
-        <h1 class="title">Inventário da Casa</h1>
 
-        <div class="row" style="gap:8px; align-items:center; justify-content:flex-end;">
-          <div class="pill" id="onlinePill" title="Status">—</div>
-          <button id="adminBtn" class="small ghost hidden" title="Painel admin">🛠️</button>
-          <button id="logoutBtn" class="small">Sair</button>
+    <!-- TOP AREA (Banner + Profile Panel) -->
+    <div class="topGrid">
+      <!-- Banner -->
+      <div class="card bannerCard">
+        <!-- Se quiser usar imagem depois: coloque um <img class="bannerImg" src="..." /> -->
+        <div class="bannerText">inventário de casa</div>
+      </div>
+
+      <!-- Profile Panel -->
+      <div class="card profileCard">
+        <div class="profileLine">
+          <span class="statusDot" id="onlineDot"></span>
+          <span class="statusText" id="onlineText">online</span>
         </div>
-      </div>
 
-      <div class="muted" style="margin-top:6px;">
-        Código do inventário:
-        <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
-      </div>
-
-      <div class="divider"></div>
-
-      <!-- MEMBERS -->
-      <div id="membersBox">
-        <div class="row header-row" style="align-items:flex-end;">
-          <div>
-            <div style="font-weight:900;">Membros</div>
-            <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
-          </div>
-          <div class="pill" id="myRolePill" title="Seu cargo">—</div>
+        <div class="profileActions">
+          <button id="copyInvBtn" class="small ghost" type="button" title="Copiar código">
+            Código
+          </button>
+          <button id="logoutBtn" class="small" type="button">Sair</button>
         </div>
-        <div id="membersList" class="list" style="margin-top:10px;"></div>
+
+        <div class="muted" style="margin-top:10px;">
+          Código do inventário:
+          <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
+        </div>
+
+        <div class="pill subtle" id="myRolePill" title="Seu cargo" style="margin-top:10px;">—</div>
       </div>
+    </div>
 
-      <div class="divider"></div>
-
-      <!-- SEARCH -->
+    <!-- SEARCH BLOCK -->
+    <div class="card sectionCard">
+      <div class="sectionTitle">Buscar</div>
       <div class="row">
         <input id="search" placeholder="Buscar item" />
       </div>
+    </div>
 
-      <div class="divider"></div>
+    <!-- MAIN BLOCK (Add + actions + list) -->
+    <div class="card sectionCard">
+      <div class="sectionTitle">Itens</div>
 
       <!-- ADD / EDIT -->
       <div class="row">
@@ -149,46 +154,18 @@
 
       <div class="list" id="list"></div>
     </div>
-  </div>
 
-  <!-- ===== ADMIN MODAL (SEGURA) ===== -->
-  <div id="adminBackdrop" class="modal-backdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
-      <div class="row header-row" style="align-items:center;">
-        <div style="font-weight:900;" id="adminTitle">Painel admin</div>
-        <button id="adminClose" class="small ghost" type="button">Fechar</button>
-      </div>
-
-      <div id="adminGate">
-        <div class="muted" style="margin:6px 0 10px;">
-          *Aviso:* isso é só um “atalho” no front (GitHub Pages). Não dá pra dropar DB com segurança aqui.
-        </div>
-
-        <div class="row">
-          <input id="adminUser" placeholder="usuário" autocomplete="off" />
-        </div>
-        <div class="row mt10">
-          <input id="adminPass" type="password" placeholder="senha" autocomplete="off" />
-        </div>
-        <div class="row mt12">
-          <button id="adminLogin" type="button">Entrar</button>
+    <!-- MEMBERS FOOTER -->
+    <div class="card sectionCard membersCard">
+      <div class="row header-row" style="align-items:flex-end;">
+        <div>
+          <div class="sectionTitle" style="margin:0;">Membros</div>
+          <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
         </div>
       </div>
-
-      <div id="adminTools" class="hidden">
-        <div class="muted" id="adminStatus" style="margin:6px 0 10px;">—</div>
-
-        <div class="row" style="gap:10px;">
-          <button id="toolResub" class="small" type="button">Reinscrever realtime</button>
-          <button id="toolReload" class="small" type="button">Recarregar dados</button>
-          <button id="toolClearLocal" class="small" type="button">Limpar cache local</button>
-        </div>
-
-        <div class="muted" style="margin-top:10px;">
-          “Dropar tabelas/policies/functions” não fica no app, porque expõe seu banco.
-        </div>
-      </div>
+      <div id="membersList" class="list" style="margin-top:10px;"></div>
     </div>
+
   </div>
 
   <!-- Footer -->
@@ -248,7 +225,7 @@
       // ========= TOAST =========
       const lastToastAt = new Map();
       function normalizeToastType(type) {
-        if (type === "success" || type === "error" || type === "warn") return type;
+        if (type === "success" || type === "error" || type === "warn" || type === "info") return type;
         return "warn";
       }
       function toast(message, type = "warn", key = "") {
@@ -352,7 +329,6 @@
 
       let showOnlyNeeds = false;
       let essentialFilter = "both"; // both | essential | not
-
       let editItemId = null;
 
       // pending setup (caso confirm email ON)
@@ -360,6 +336,14 @@
       const setPending = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
       const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
       const clearPending = () => localStorage.removeItem(PENDING_KEY);
+
+      function setOnlineUI(isOnline) {
+        const dot = $("onlineDot");
+        const txt = $("onlineText");
+        dot.classList.toggle("off", !isOnline);
+        txt.textContent = isOnline ? "online" : "offline";
+      }
+      setOnlineUI(navigator.onLine);
 
       function needsBuy(it) {
         const qty = Number(it.qty ?? 0);
@@ -460,21 +444,22 @@
 
           const left = document.createElement("div");
           const needs = needsBuy(it);
-          const ess = it.essential ? ' • <span class="pill">essencial</span>' : "";
+          const ess = it.essential ? ' <span class="pill mini">essencial</span>' : "";
+          const needsPill = needs ? ' <span class="pill mini danger">precisa comprar</span>' : "";
           left.innerHTML = `
             <div class="name">${it.name}</div>
             <div class="sub">
               ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
-              ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
-              ${ess}
+              ${needsPill}${ess}
             </div>
           `;
 
           const controls = document.createElement("div");
           controls.className = "controls";
 
-          // ordem pedida: + <qtd> - ⚙️ ℹ️ 🗑️
+          // ORDEM: + [qtd] - ⚙️ ℹ️ 🗑️
           const plus = document.createElement("button");
+          plus.className = "btnIcon";
           plus.textContent = "+";
           plus.onclick = () => changeQty(it.id, it.unit === "un" ? +1 : +0.1);
 
@@ -483,23 +468,27 @@
           qty.textContent = `${it.qty} ${it.unit}`;
 
           const minus = document.createElement("button");
+          minus.className = "btnIcon";
           minus.textContent = "−";
           minus.onclick = () => changeQty(it.id, it.unit === "un" ? -1 : -0.1);
 
           const edit = document.createElement("button");
+          edit.className = "btnIcon";
           edit.textContent = "⚙️";
           edit.title = "Editar";
           edit.onclick = () => startEdit(it);
 
           const info = document.createElement("button");
+          info.className = "btnIcon";
           info.textContent = "ℹ️";
           info.title = "Info / histórico";
           info.onclick = () => showInfo(it);
 
           const del = document.createElement("button");
+          del.className = "btnIcon dangerBtn";
           del.textContent = "🗑️";
           del.title = "Excluir";
-          del.onclick = () => deleteItem(it.id, it.name);
+          del.onclick = () => deleteItem(it);
 
           controls.append(plus, qty, minus, edit, info, del);
           row.append(left, controls);
@@ -679,7 +668,7 @@
         }
       }
 
-      // ✅ BOOT DEFINITIVO
+      // ✅ BOOT DEFINITIVO (se tiver inv -> entra; se não -> cria; se perdeu acesso -> admin)
       async function bootFromProfile() {
         if (!currentUser) return;
 
@@ -751,19 +740,6 @@
         }
       }
 
-      // ========= ONLINE PILL =========
-      function setOnlinePill() {
-        const el = $("onlinePill");
-        if (!el) return;
-        const on = navigator.onLine;
-        el.textContent = on ? "online" : "offline";
-        el.classList.toggle("danger", !on);
-        el.classList.toggle("good", on);
-      }
-      setOnlinePill();
-      window.addEventListener("online", () => { setOnlinePill(); toast("Conexão voltou ✅", "success", "online"); });
-      window.addEventListener("offline", () => { setOnlinePill(); toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"); });
-
       // ========= LAST SEEN =========
       let lastSeenPingAt = 0;
       async function pingLastSeen() {
@@ -786,69 +762,6 @@
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden) pingLastSeen();
       });
-
-      // ========= HISTORY FLOW (zero + buy debounce) =========
-      const buyTimers = new Map(); // itemId -> timeoutId
-
-      function clearBuyTimer(itemId) {
-        const t = buyTimers.get(itemId);
-        if (t) clearTimeout(t);
-        buyTimers.delete(itemId);
-      }
-
-      async function markZeroNow(itemId) {
-        if (!currentInventoryId) return;
-
-        clearBuyTimer(itemId);
-
-        const nowIso = new Date().toISOString();
-        const { error } = await supabase
-          .from("inventory_items")
-          .update({ last_zero_at: nowIso })
-          .eq("id", itemId)
-          .eq("inventory_id", currentInventoryId);
-
-        if (error) {
-          console.warn("markZeroNow:", error);
-          toast("Falha ao salvar 'zerado': " + error.message, "error", "zero-save-fail");
-        }
-      }
-
-      function scheduleBuyUpdate(itemId, buyQty) {
-        if (!currentInventoryId) return;
-
-        clearBuyTimer(itemId);
-
-        const timeoutId = setTimeout(async () => {
-          buyTimers.delete(itemId);
-
-          const it = items.find(x => x.id === itemId);
-          if (!it) return;
-
-          const nowIso = new Date().toISOString();
-
-          const payload = {
-            prev_buy_at: it.last_buy_at || it.prev_buy_at || null,
-            prev_buy_qty: it.last_buy_qty ?? it.prev_buy_qty ?? null,
-            last_buy_at: nowIso,
-            last_buy_qty: Number(buyQty),
-          };
-
-          const { error } = await supabase
-            .from("inventory_items")
-            .update(payload)
-            .eq("id", itemId)
-            .eq("inventory_id", currentInventoryId);
-
-          if (error) {
-            console.warn("scheduleBuyUpdate:", error);
-            toast("Falha ao salvar 'comprado': " + error.message, "error", "buy-save-fail");
-            try { await loadItems(currentInventoryId); } catch {}
-          }
-        }, 6000);
-
-        buyTimers.set(itemId, timeoutId);
-      }
 
       // ========= ITEMS CRUD =========
       function resetEdit() {
@@ -896,10 +809,6 @@
         overlaySafe(true, "upsert-item");
         try {
           if (editItemId) {
-            const prev = items.find(x => x.id === editItemId);
-            const oldQty = round(Number(prev?.qty || 0));
-            const newQty = round(Number(payload.qty || 0));
-
             const { error } = await withTimeout(
               supabase.from("inventory_items")
                 .update(payload)
@@ -910,33 +819,25 @@
             );
             if (error) throw error;
 
-            // history no edit
-            if (oldQty > 0 && newQty === 0) {
-              await markZeroNow(editItemId);
-            } else if (oldQty === 0 && newQty > 0) {
-              scheduleBuyUpdate(editItemId, newQty);
-            }
-
             toast("Atualizado ✅", "success", "item-upd");
             resetEdit();
           } else {
             payload.created_by = currentUser.id;
 
-            const { error } = await withTimeout(
-              supabase.from("inventory_items").insert(payload),
-              8000,
+            // ✅ pega a row criada (aparece na hora)
+            const { data, error } = await withTimeout(
+              supabase.from("inventory_items")
+                .insert(payload)
+                .select("*")
+                .single(),
+              9000,
               "insert item"
             );
             if (error) throw error;
 
-            // se criou já com qty > 0, considera compra (debounce pra não spammar se usuário ainda vai mexer)
-            if (qty > 0) {
-              // vai ser encontrado via realtime; fallback: agenda baseado no insert visual
-              // (se realtime vier rápido, o UPDATE acha o item pelo state depois)
-              setTimeout(() => {
-                const created = items.find(x => x.name_norm === payload.name_norm && x.unit === payload.unit);
-                if (created && Number(created.qty) > 0) scheduleBuyUpdate(created.id, Number(created.qty));
-              }, 300);
+            if (data?.id) {
+              items = [data, ...items.filter(x => x.id !== data.id)];
+              renderItems();
             }
 
             toast("Adicionado ✅", "success", "item-add");
@@ -959,8 +860,7 @@
         const it = items.find(x => x.id === itemId);
         if (!it) return;
 
-        const oldQty = round(Number(it.qty || 0));
-        const newQty = round(Math.max(0, oldQty + Number(delta)));
+        const newQty = round(Math.max(0, Number(it.qty || 0) + Number(delta)));
 
         // otimista
         items = items.map(x => x.id === itemId ? { ...x, qty: newQty } : x);
@@ -976,40 +876,30 @@
           console.warn(error);
           toast("Não salvou no cloud: " + error.message, "error", "qty-fail");
           try { await loadItems(currentInventoryId); } catch {}
-          return;
-        }
-
-        // history rules
-        if (oldQty > 0 && newQty === 0) {
-          await markZeroNow(itemId);
-          return;
-        }
-        if (oldQty === 0 && newQty > 0) {
-          scheduleBuyUpdate(itemId, newQty);
         }
       }
 
-      async function deleteItem(itemId, itemName = "") {
-        if (!currentInventoryId) return;
-        if (!confirm(`Excluir "${itemName || "item"}"?`)) return;
+      async function deleteItem(it) {
+        if (!it?.id) return;
+        if (!confirm(`Excluir "${it.name}"?`)) return;
 
-        overlaySafe(true, "delete");
-        try {
-          const { error } = await withTimeout(
-            supabase.from("inventory_items")
-              .delete()
-              .eq("id", itemId)
-              .eq("inventory_id", currentInventoryId),
-            9000,
-            "delete item"
-          );
-          if (error) throw error;
+        // otimista
+        const prev = items;
+        items = items.filter(x => x.id !== it.id);
+        renderItems();
+
+        const { error } = await supabase
+          .from("inventory_items")
+          .delete()
+          .eq("id", it.id)
+          .eq("inventory_id", currentInventoryId);
+
+        if (error) {
+          items = prev;
+          renderItems();
+          toast("Falha ao excluir: " + error.message, "error", "del-fail");
+        } else {
           toast("Excluído ✅", "success", "del-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Falha ao excluir: " + (e?.message || e), "error", "del-fail");
-        } finally {
-          overlaySafe(false, "delete");
         }
       }
 
@@ -1220,6 +1110,7 @@
           toast("Não consegui copiar.", "error", "copy-fail");
         }
       };
+      $("copyInvBtn").onclick = () => $("invCodeShow").click();
 
       $("add").onclick = () => upsertItem();
       $("cancelEdit").onclick = () => resetEdit();
@@ -1243,6 +1134,7 @@
           essentialFilter === "essential" ? "Essenciais: só essenciais" :
           "Essenciais: só não essenciais";
 
+        // ✅ garante atualizar sempre (inclusive após realtime)
         renderItems();
       };
 
@@ -1250,100 +1142,7 @@
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
-      // ========= ADMIN PANEL (safe tools only) =========
-      let adminUnlocked = false;
-      function adminOpen() {
-        $("adminBackdrop").classList.add("on");
-        $("adminBackdrop").setAttribute("aria-hidden", "false");
-        $("adminUser").value = "";
-        $("adminPass").value = "";
-        $("adminGate").classList.toggle("hidden", adminUnlocked);
-        $("adminTools").classList.toggle("hidden", !adminUnlocked);
-        refreshAdminStatus();
-      }
-      function adminClose() {
-        $("adminBackdrop").classList.remove("on");
-        $("adminBackdrop").setAttribute("aria-hidden", "true");
-      }
-      function refreshAdminStatus() {
-        const uid = currentUser?.id || "—";
-        const inv = currentInventoryId || "—";
-        const on = navigator.onLine ? "online" : "offline";
-        $("adminStatus").textContent = `user: ${uid} • inv: ${inv} • ${on}`;
-      }
-
-      $("adminClose").onclick = adminClose;
-      $("adminBackdrop").addEventListener("click", (e) => {
-        if (e.target === $("adminBackdrop")) adminClose();
-      });
-
-      $("adminLogin").onclick = () => {
-        const u = ($("adminUser").value || "").trim();
-        const p = ($("adminPass").value || "").trim();
-        if (u === "admin" && p === "admin000teste") {
-          adminUnlocked = true;
-          $("adminGate").classList.add("hidden");
-          $("adminTools").classList.remove("hidden");
-          toast("Admin desbloqueado ✅", "success", "admin-ok");
-          refreshAdminStatus();
-        } else {
-          toast("Admin inválido.", "error", "admin-bad");
-        }
-      };
-
-      $("toolResub").onclick = async () => {
-        if (!currentInventoryId) return toast("Sem inventário.", "warn", "no-inv");
-        overlaySafe(true, "admin-resub");
-        try {
-          await startRealtime(currentInventoryId);
-          toast("Realtime reinscrito ✅", "success", "resub-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Falha no realtime: " + (e?.message || e), "error", "resub-fail");
-        } finally {
-          overlaySafe(false, "admin-resub");
-        }
-      };
-
-      $("toolReload").onclick = async () => {
-        if (!currentInventoryId) return toast("Sem inventário.", "warn", "no-inv");
-        overlaySafe(true, "admin-reload");
-        try {
-          await Promise.all([loadItems(currentInventoryId), loadMembers(currentInventoryId), loadInventoryMeta(currentInventoryId)]);
-          toast("Recarregado ✅", "success", "reload-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Falha ao recarregar: " + (e?.message || e), "error", "reload-fail");
-        } finally {
-          overlaySafe(false, "admin-reload");
-        }
-      };
-
-      $("toolClearLocal").onclick = () => {
-        if (!confirm("Limpar cache local do app (localStorage)?")) return;
-        try {
-          // não apaga tudo do navegador, só as chaves do app
-          Object.keys(localStorage).forEach(k => {
-            if (k.startsWith("pending_inv_setup_") || k.startsWith("home_inventory_") || k.startsWith("homeinv_")) {
-              localStorage.removeItem(k);
-            }
-          });
-          localStorage.removeItem(PENDING_KEY);
-          toast("Cache local limpo ✅", "success", "local-ok");
-        } catch (e) {
-          console.warn(e);
-          toast("Falha ao limpar cache.", "error", "local-fail");
-        }
-      };
-
-      // mostra botão admin só depois de logar (e só se admin quiser abrir)
-      function maybeShowAdminBtn() {
-        // deixa sempre disponível após login (mas escondido antes)
-        $("adminBtn").classList.toggle("hidden", !currentUser);
-      }
-      $("adminBtn").onclick = adminOpen;
-
-      // ========= AUTH STATE =========
+      // ========= AUTH STATE (SEM “TROCA ABA = LOADING”) =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -1356,7 +1155,6 @@
           items = [];
           members = [];
           resetEdit();
-          maybeShowAdminBtn();
           showLogin();
           return;
         }
@@ -1364,7 +1162,6 @@
         booting = true;
         try {
           currentUser = session.user;
-          maybeShowAdminBtn();
           await bootFromProfile();
           pingLastSeen();
         } catch (e) {
@@ -1379,23 +1176,26 @@
       (async () => {
         try {
           const session = await getSession();
-          if (!session?.user) {
-            currentUser = null;
-            maybeShowAdminBtn();
-            return showLogin();
-          }
+          if (!session?.user) return showLogin();
 
           currentUser = session.user;
-          maybeShowAdminBtn();
           await bootFromProfile();
           pingLastSeen();
         } catch (e) {
           console.error(e);
-          currentUser = null;
-          maybeShowAdminBtn();
           showLogin();
         }
       })();
+
+      // Offline/Online UI
+      window.addEventListener("offline", () => {
+        setOnlineUI(false);
+        toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline");
+      });
+      window.addEventListener("online", () => {
+        setOnlineUI(true);
+        toast("Conexão voltou ✅", "success", "online");
+      });
     });
   </script>
 </body>
