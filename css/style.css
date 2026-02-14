@@ -25,42 +25,32 @@
 html{
   height: 100%;
   background: var(--bg);
-
-  /* ✅ trava o “pull-to-refresh / rubber band” no root */
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: none; /* evita “puxar e sumir” em alguns Android */
 }
 
 body{
   margin:0;
-
-  /* ✅ corpo vira “tela fixa” e nunca “encolhe/some” */
-  height: 100vh;
-  height: 100dvh; /* Android moderno */
-
+  min-height: 100%;
   display:flex;
   flex-direction: column;
-
-  /* ✅ IMPORTANTÍSSIMO: body não rola */
-  overflow: hidden;
-
   background: radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
               radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
               var(--bg);
   color: var(--text);
-
-  /* ✅ estabiliza camadas quando tem backdrop-filter */
-  position: relative;
-  isolation: isolate;
 }
 
-/* util */
+/* ✅ FIX CRÍTICO (Android/Chrome): evita bug de flex + scroll que “some tudo” */
+body{ min-height: 0; }
+#appView.app-scroll{ min-height: 0; overscroll-behavior: contain; }
+#authView.auth-scroll{ min-height: 0; overscroll-behavior: contain; }
+
 .hidden{ display:none !important; }
 .mt10{ margin-top:10px; }
 .mt12{ margin-top:12px; }
 .w120{ max-width:120px; }
+
 .copy{ cursor: pointer; user-select: none; }
 
-/* layout */
 .wrap{
   max-width: 920px;
   width: 100%;
@@ -68,23 +58,6 @@ body{
   padding: 16px;
 }
 
-/* ✅ O APP (quando logado) vira o scroller */
-.app-scroll{
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-
-  /* ✅ evita bounce que “quebra” o layout */
-  overscroll-behavior: contain;
-
-  /* ✅ não “puxa” a página inteira */
-  touch-action: pan-y;
-
-  /* espaço pro footer */
-  padding-bottom: 90px;
-}
-
-/* cards */
 .card{
   background: var(--card);
   border: 1px solid rgba(255,255,255,.55);
@@ -112,7 +85,6 @@ body{
   align-items:center;
 }
 
-/* inputs */
 input, select, button{
   border-radius: var(--radius-2);
   border: 1px solid rgba(11,18,32,.10);
@@ -156,7 +128,6 @@ button.ghost{
   box-shadow: none;
 }
 
-/* filtro ativo */
 #filterList.active{
   background: linear-gradient(180deg, rgba(42,169,255,.22), rgba(42,169,255,.08));
   border-color: rgba(42,169,255,.40);
@@ -168,7 +139,6 @@ button.ghost{
   margin-top: 8px;
 }
 
-/* list items */
 .list{
   margin-top: 14px;
   display:flex;
@@ -203,7 +173,6 @@ button.ghost{
   gap: 6px;
 }
 
-/* controls */
 .controls{
   display:flex;
   align-items:center;
@@ -224,7 +193,6 @@ button.ghost{
   font-variant-numeric: tabular-nums;
 }
 
-/* pills */
 .pill{
   padding: 6px 10px;
   border-radius: 999px;
@@ -246,26 +214,19 @@ button.ghost{
   color: #146b33;
 }
 
-/* divider */
 .divider{
   height: 1px;
   background: rgba(11,18,32,.10);
   margin: 12px 0;
 }
 
-/* auth center */
 .center-screen{
   flex: 1;
-  min-height: 100%;
+  min-height: calc(100vh - 60px);
   display:flex;
   align-items:center;
   justify-content:center;
   padding: 16px;
-
-  /* ✅ auth pode rolar sozinho se teclado empurrar */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
 }
 
 .login-card{
@@ -274,7 +235,6 @@ button.ghost{
   padding: 16px;
 }
 
-/* overlay loading */
 .overlay{
   position: fixed;
   inset: 0;
@@ -300,14 +260,12 @@ button.ghost{
 }
 @keyframes spin{ to{ transform: rotate(360deg); } }
 
-/* transitions */
 .fade-in{ animation: fade .18s ease both; }
 @keyframes fade{
   from{ opacity:.2; transform: translateY(6px); }
   to{ opacity:1; transform:none; }
 }
 
-/* ===== toast ===== */
 .toast-container{
   position: fixed;
   top: 12px;
@@ -373,18 +331,12 @@ button.ghost{
   background: rgba(245,158,11,.12);
 }
 
-/* footer */
 .footer{
   text-align: center;
   font-size: 12px;
   color: rgba(91,107,133,.92);
   padding: 16px 10px 22px;
   opacity: .9;
-
-  /* ✅ footer fixado visualmente sem “sumir” */
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
 }
 .footer a{
   color: #0b3a52;
@@ -393,7 +345,6 @@ button.ghost{
 }
 .footer a:hover{ text-decoration: underline; }
 
-/* ===== modal / admin (FIX) ===== */
 .modal-backdrop{
   position: fixed;
   inset: 0;
@@ -424,7 +375,15 @@ button.ghost{
   margin: 0 0 6px;
 }
 
-/* responsive */
+/* ✅ EXTRA: em alguns Android o blur dá glitch; isso corta só no Android */
+@supports not (-webkit-touch-callout: none) {
+  .card,
+  .toast-bubble,
+  .modal{
+    backdrop-filter: none !important;
+  }
+}
+
 @media (max-width: 540px){
   .wrap{ padding: 12px; }
 
