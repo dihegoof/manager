@@ -38,6 +38,17 @@ body{
   position: relative;
 }
 
+/* ✅ background fixo (pra bg-ios existir e não dar treta) */
+.bg-ios{
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
+    radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
+    var(--bg);
+}
+
 /* util */
 .hidden{ display:none !important; }
 .mt10{ margin-top:10px; }
@@ -126,7 +137,8 @@ button.ghost{
   box-shadow: none;
 }
 
-/* filtro ativo */
+/* ✅ filtro ativo (novo id) + compat (antigo) */
+#filterBtn.active,
 #filterList.active{
   background: linear-gradient(180deg, rgba(42,169,255,.22), rgba(42,169,255,.08));
   border-color: rgba(42,169,255,.40);
