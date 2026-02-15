@@ -22,10 +22,11 @@
 
 *{ box-sizing: border-box; }
 
-html{
+html, body{
   height: 100%;
   background: var(--bg);
-  overscroll-behavior-y: none; /* evita “puxar e sumir” em alguns Android */
+  overflow-x: hidden;
+  overscroll-behavior-y: auto; /* ✅ não trava o scroll */
 }
 
 body{
@@ -33,10 +34,21 @@ body{
   min-height: 100%;
   display:flex;
   flex-direction: column;
-  background: radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
-              radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
-              var(--bg);
   color: var(--text);
+  position: relative;
+  /* ✅ IMPORTANTE: sem backdrop-filter no body */
+}
+
+/* ✅ fundo ios-style SEM “sumir” no scroll: usa pseudo-elemento fixo */
+body::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
+    radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
+    var(--bg);
 }
 
 /* util */
@@ -44,7 +56,6 @@ body{
 .mt10{ margin-top:10px; }
 .mt12{ margin-top:12px; }
 .w120{ max-width:120px; }
-
 .copy{ cursor: pointer; user-select: none; }
 
 /* layout */
@@ -53,6 +64,9 @@ body{
   width: 100%;
   margin: 0 auto;
   padding: 16px;
+  position: relative;
+  z-index: 1;              /* ✅ mantém acima do background fixo */
+  transform: translateZ(0);/* ✅ força camada estável no Android */
 }
 
 .card{
@@ -61,7 +75,7 @@ body{
   border-radius: var(--radius);
   padding: 14px;
   box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
+  /* ✅ REMOVIDO: backdrop-filter (isso costuma “apagar” no Xiaomi) */
 }
 
 .title{
@@ -86,7 +100,7 @@ body{
 input, select, button{
   border-radius: var(--radius-2);
   border: 1px solid rgba(11,18,32,.10);
-  background: rgba(255,255,255,.90);
+  background: rgba(255,255,255,.95);
   color: var(--text);
   padding: 12px 12px;
   font-size: 14px;
@@ -121,7 +135,7 @@ button:active{ transform: translateY(1px); }
 }
 
 button.ghost{
-  background: rgba(255,255,255,.72);
+  background: rgba(255,255,255,.80);
   border-color: rgba(11,18,32,.12);
   box-shadow: none;
 }
@@ -154,8 +168,9 @@ button.ghost{
   padding: 12px 12px;
   border: 1px solid rgba(11,18,32,.10);
   border-radius: 16px;
-  background: rgba(255,255,255,.92);
+  background: rgba(255,255,255,.95);
   box-shadow: 0 10px 26px rgba(16,24,40,.06);
+  transform: translateZ(0); /* ✅ evita “sumir” em scroll */
 }
 
 .name{
@@ -202,6 +217,7 @@ button.ghost{
   border: 1px solid rgba(124,201,255,.36);
   font-size: 12px;
   color: #0b3a52;
+  white-space: nowrap;
 }
 
 .danger{
@@ -231,6 +247,9 @@ button.ghost{
   align-items:center;
   justify-content:center;
   padding: 16px;
+  position: relative;
+  z-index: 1;
+  transform: translateZ(0);
 }
 
 .login-card{
@@ -247,7 +266,7 @@ button.ghost{
   align-items:center;
   justify-content:center;
   background: rgba(0,0,0,.20);
-  backdrop-filter: blur(2px);
+  /* ✅ REMOVIDO backdrop-filter */
   opacity:0;
   pointer-events:none;
   transition: opacity .18s ease;
@@ -303,13 +322,13 @@ button.ghost{
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid rgba(11,18,32,.10);
-  background: rgba(255,255,255,.92);
+  background: rgba(255,255,255,.95);
   box-shadow: 0 16px 40px rgba(16,24,40,.14);
   font-weight: 800;
   font-size: 13px;
   position: relative;
   line-height: 1.25;
-  backdrop-filter: blur(10px);
+  /* ✅ REMOVIDO backdrop-filter */
 }
 
 .toast-bubble::after{
@@ -345,6 +364,8 @@ button.ghost{
   color: rgba(91,107,133,.92);
   padding: 16px 10px 22px;
   opacity: .9;
+  position: relative;
+  z-index: 1;
 }
 .footer a{
   color: #0b3a52;
