@@ -135,11 +135,11 @@
 
       <div class="divider"></div>
 
-      <!-- ACTIONS -->
+      <!-- ACTIONS (novo esquema) -->
       <div class="row actions">
-        <button class="small" id="filterList">Filtrar lista</button>
-        <button class="small" id="filterEssentials">Essenciais: ambos</button>
-        <button class="small" id="exportText">Exportar (texto)</button>
+        <button class="small" id="filterBtn">Filtro: nenhum</button>
+        <button class="small" id="sortBtn">Organizar: A→Z</button>
+        <button class="small hidden" id="exportBtn">Exportar (texto)</button>
         <button class="small" id="import">Importar</button>
         <button class="small" id="clear">Zerar tudo</button>
       </div>
@@ -322,9 +322,40 @@
       let realtimeItems = null;
       let realtimeMembers = null;
 
-      let showOnlyNeeds = false;
-      let essentialFilter = "both"; // both | essential | not
       let editItemId = null;
+
+      // ======= FILTRO / ORDEM (novo) =======
+      // filterMode: none | essential | notEssential | needs
+      let filterMode = "none";
+      // sortMode: az | za | qtyAsc | qtyDesc
+      let sortMode = "az";
+
+      function filterLabel() {
+        if (filterMode === "none") return "Filtro: nenhum";
+        if (filterMode === "essential") return "Filtro: essenciais";
+        if (filterMode === "notEssential") return "Filtro: não essenciais";
+        return "Filtro: precisa comprar";
+      }
+
+      function sortLabel() {
+        if (sortMode === "az") return "Organizar: A→Z";
+        if (sortMode === "za") return "Organizar: Z→A";
+        if (sortMode === "qtyAsc") return "Organizar: Qtd ↑";
+        return "Organizar: Qtd ↓";
+      }
+
+      function syncActionButtons() {
+        const fb = $("filterBtn");
+        const sb = $("sortBtn");
+        const eb = $("exportBtn");
+
+        fb.textContent = filterLabel();
+        sb.textContent = sortLabel();
+
+        const active = (filterMode !== "none");
+        fb.classList.toggle("active", active);
+        eb.classList.toggle("hidden", !active);
+      }
 
       // ======= HISTÓRICO (debounce compra) =======
       const BUY_DEBOUNCE_MS = 6000;
@@ -471,34 +502,55 @@
         }
       }
 
+      // ======= lista visível (busca + filtro + ordem) =======
+      function getVisibleItems() {
+        const q = norm($("search").value);
+
+        let filtered = items.filter(it => {
+          const matchesSearch = !q || (it.name_norm || "").includes(q);
+
+          let matchesFilter = true;
+          if (filterMode === "essential") matchesFilter = !!it.essential;
+          else if (filterMode === "notEssential") matchesFilter = !it.essential;
+          else if (filterMode === "needs") matchesFilter = needsBuy(it);
+
+          return matchesSearch && matchesFilter;
+        });
+
+        // ordenar
+        if (sortMode === "az" || sortMode === "za") {
+          filtered.sort((a,b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
+          if (sortMode === "za") filtered.reverse();
+        } else if (sortMode === "qtyAsc" || sortMode === "qtyDesc") {
+          filtered.sort((a,b) => {
+            const qa = Number(a.qty ?? 0);
+            const qb = Number(b.qty ?? 0);
+            // desempate por nome pra ficar estável
+            if (qa === qb) return (a.name || "").localeCompare((b.name || ""), "pt-BR");
+            return qa - qb;
+          });
+          if (sortMode === "qtyDesc") filtered.reverse();
+        }
+
+        return filtered;
+      }
+
       // ========= RENDER ITEMS =========
       function renderItems() {
-        const q = norm($("search").value);
         const list = $("list");
         list.innerHTML = "";
 
-        let filtered = items
-          .filter(it => {
-            const matchesSearch = !q || (it.name_norm || "").includes(q);
-            const matchesNeeds = !showOnlyNeeds || needsBuy(it);
+        const visible = getVisibleItems();
 
-            let matchesEssential = true;
-            if (essentialFilter === "essential") matchesEssential = !!it.essential;
-            if (essentialFilter === "not") matchesEssential = !it.essential;
-
-            return matchesSearch && matchesNeeds && matchesEssential;
-          })
-          .sort((a,b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
-
-        if (!filtered.length) {
+        if (!visible.length) {
           const empty = document.createElement("div");
           empty.className = "sub";
-          empty.textContent = showOnlyNeeds ? "Nenhum item precisa comprar 🙂" : "Nada por aqui 🙂";
+          empty.textContent = (filterMode === "needs") ? "Nenhum item precisa comprar 🙂" : "Nada por aqui 🙂";
           list.appendChild(empty);
           return;
         }
 
-        for (const it of filtered) {
+        for (const it of visible) {
           const row = document.createElement("div");
           row.className = "item";
 
@@ -984,21 +1036,25 @@
       }
 
       // ========= EXPORT / IMPORT / CLEAR =========
-      function exportText() {
-        const lines = items
-          .slice()
-          .sort((a,b) => (a.name||"").localeCompare((b.name||""), "pt-BR"))
-          .map(it => {
-            const ess = it.essential ? " (essencial)" : "";
-            const needs = needsBuy(it) ? " [PRECISA]" : "";
-            return `- ${it.name}: ${it.qty} ${it.unit} (min: ${it.min_qty || 0})${ess}${needs}`;
-          });
+      function exportVisibleText() {
+        const visible = getVisibleItems();
+
+        if (!visible.length) {
+          toast("Nada pra exportar nesse filtro.", "warn", "export-empty");
+          return;
+        }
+
+        const lines = visible.map(it => {
+          const ess = it.essential ? " (essencial)" : "";
+          const needs = needsBuy(it) ? " [PRECISA]" : "";
+          return `- ${it.name}: ${it.qty} ${it.unit} (min: ${it.min_qty || 0})${ess}${needs}`;
+        });
 
         const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "inventario.txt";
+        a.download = "inventario_filtrado.txt";
         a.click();
         URL.revokeObjectURL(url);
         toast("Exportado ✅", "success", "export-text");
@@ -1196,27 +1252,29 @@
       $("search").addEventListener("input", renderItems);
       $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") upsertItem(); });
 
-      $("filterList").onclick = () => {
-        showOnlyNeeds = !showOnlyNeeds;
-        $("filterList").classList.toggle("active", showOnlyNeeds);
-        $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
+      // ✅ Filtrar (cicla)
+      $("filterBtn").onclick = () => {
+        if (filterMode === "none") filterMode = "essential";
+        else if (filterMode === "essential") filterMode = "notEssential";
+        else if (filterMode === "notEssential") filterMode = "needs";
+        else filterMode = "none";
+
+        syncActionButtons();
         renderItems();
       };
 
-      $("filterEssentials").onclick = () => {
-        if (essentialFilter === "both") essentialFilter = "essential";
-        else if (essentialFilter === "essential") essentialFilter = "not";
-        else essentialFilter = "both";
+      // ✅ Organizar (cicla)
+      $("sortBtn").onclick = () => {
+        if (sortMode === "az") sortMode = "za";
+        else if (sortMode === "za") sortMode = "qtyAsc";
+        else if (sortMode === "qtyAsc") sortMode = "qtyDesc";
+        else sortMode = "az";
 
-        $("filterEssentials").textContent =
-          essentialFilter === "both" ? "Essenciais: ambos" :
-          essentialFilter === "essential" ? "Essenciais: só essenciais" :
-          "Essenciais: só não essenciais";
-
+        syncActionButtons();
         renderItems();
       };
 
-      $("exportText").onclick = exportText;
+      $("exportBtn").onclick = exportVisibleText;
       $("import").onclick = importJson;
       $("clear").onclick = clearAll;
 
@@ -1254,13 +1312,18 @@
       (async () => {
         try {
           const session = await getSession();
-          if (!session?.user) return showLogin();
+          if (!session?.user) {
+            syncActionButtons();
+            return showLogin();
+          }
 
           currentUser = session.user;
+          syncActionButtons();
           await bootFromProfile();
           pingLastSeen();
         } catch (e) {
           console.error(e);
+          syncActionButtons();
           showLogin();
         }
       })();
@@ -1268,6 +1331,9 @@
       // Offline/Online
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
+
+      // init buttons
+      syncActionButtons();
     });
   </script>
 </body>
