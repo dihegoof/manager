@@ -26,7 +26,7 @@ html, body{
   height: 100%;
   background: var(--bg);
   overflow-x: hidden;
-  overscroll-behavior-y: auto; /* ✅ não trava o scroll */
+  overscroll-behavior-y: auto;
 }
 
 body{
@@ -36,19 +36,6 @@ body{
   flex-direction: column;
   color: var(--text);
   position: relative;
-  /* ✅ IMPORTANTE: sem backdrop-filter no body */
-}
-
-/* ✅ fundo ios-style SEM “sumir” no scroll: usa pseudo-elemento fixo */
-body::before{
-  content:"";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(900px 500px at 30% 0%, rgba(124,201,255,.35), transparent 60%),
-    radial-gradient(800px 450px at 80% 10%, rgba(42,169,255,.22), transparent 55%),
-    var(--bg);
 }
 
 /* util */
@@ -65,8 +52,8 @@ body::before{
   margin: 0 auto;
   padding: 16px;
   position: relative;
-  z-index: 1;              /* ✅ mantém acima do background fixo */
-  transform: translateZ(0);/* ✅ força camada estável no Android */
+  z-index: 1;
+  transform: translateZ(0);
 }
 
 .card{
@@ -75,7 +62,6 @@ body::before{
   border-radius: var(--radius);
   padding: 14px;
   box-shadow: var(--shadow);
-  /* ✅ REMOVIDO: backdrop-filter (isso costuma “apagar” no Xiaomi) */
 }
 
 .title{
@@ -170,7 +156,7 @@ button.ghost{
   border-radius: 16px;
   background: rgba(255,255,255,.95);
   box-shadow: 0 10px 26px rgba(16,24,40,.06);
-  transform: translateZ(0); /* ✅ evita “sumir” em scroll */
+  transform: translateZ(0);
 }
 
 .name{
@@ -220,6 +206,13 @@ button.ghost{
   white-space: nowrap;
 }
 
+/* ✅ NOVA: pill neutra para "zerado há..." */
+.pill.neutral{
+  background: rgba(91,107,133,.10);
+  border-color: rgba(91,107,133,.22);
+  color: rgba(11,18,32,.72);
+}
+
 .danger{
   background: rgba(239,68,68,.10);
   border-color: rgba(239,68,68,.30);
@@ -266,7 +259,6 @@ button.ghost{
   align-items:center;
   justify-content:center;
   background: rgba(0,0,0,.20);
-  /* ✅ REMOVIDO backdrop-filter */
   opacity:0;
   pointer-events:none;
   transition: opacity .18s ease;
@@ -328,7 +320,6 @@ button.ghost{
   font-size: 13px;
   position: relative;
   line-height: 1.25;
-  /* ✅ REMOVIDO backdrop-filter */
 }
 
 .toast-bubble::after{
@@ -394,6 +385,5 @@ button.ghost{
   }
 
   .qty{
-    min-width: 72px;
-  }
+    min-width: 72px; }
 }
