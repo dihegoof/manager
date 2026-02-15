@@ -8,6 +8,8 @@
 </head>
 
 <body>
+  <div class="bg-ios" aria-hidden="true"></div>
+
   <!-- Overlay -->
   <div id="overlay" class="overlay"><div class="spinner"></div></div>
 
@@ -78,7 +80,7 @@
       </div>
 
       <div class="muted" style="margin-top:6px;">
-        Código do inventário:
+        Inventário ID:
         <span id="invCodeShow" class="pill copy" title="Toque para copiar"></span>
       </div>
 
@@ -89,7 +91,7 @@
         <div class="row header-row" style="align-items:flex-end;">
           <div>
             <div style="font-weight:900;">Membros</div>
-            <div class="muted" style="margin-top:4px;">Tempo real • cargo • visto por último</div>
+            <div class="muted" style="margin-top:4px;">Informações:</div>
           </div>
           <div class="pill" id="myRolePill" title="Seu cargo">—</div>
         </div>
@@ -193,6 +195,21 @@
         const ms = db.getTime() - da.getTime();
         if (ms < 0) return null;
         return Math.floor(ms / (1000 * 60 * 60 * 24));
+      }
+
+      function diffHuman(a, b) {
+        if (!a || !b) return "—";
+        const da = new Date(a), db = new Date(b);
+        if (isNaN(da) || isNaN(db)) return "—";
+        let ms = db.getTime() - da.getTime();
+        if (ms < 0) return "—";
+        const totalMin = Math.floor(ms / 60000);
+        const d = Math.floor(totalMin / (60 * 24));
+        const h = Math.floor((totalMin - d * 60 * 24) / 60);
+        const m = totalMin - d * 60 * 24 - h * 60;
+        if (d > 0) return `${d}d ${h}h`;
+        if (h > 0) return `${h}h ${m}min`;
+        return `${m}min`;
       }
 
       // Footer
@@ -307,8 +324,51 @@
 
       let showOnlyNeeds = false;
       let essentialFilter = "both"; // both | essential | not
-
       let editItemId = null;
+
+      // ======= HISTÓRICO (debounce compra) =======
+      const BUY_DEBOUNCE_MS = 6000;
+      const buyTimers = new Map(); // itemId -> timeoutId
+
+      function scheduleBuyUpdate(itemId, buyQty) {
+        const prev = buyTimers.get(itemId);
+        if (prev) clearTimeout(prev);
+
+        const t = setTimeout(async () => {
+          buyTimers.delete(itemId);
+          if (!currentInventoryId) return;
+
+          const it = items.find(x => x.id === itemId);
+          if (!it) return;
+
+          const nowIso = new Date().toISOString();
+          const patch = {
+            prev_buy_at: it.last_buy_at || null,
+            prev_buy_qty: (it.last_buy_qty ?? null),
+            last_buy_at: nowIso,
+            last_buy_qty: (buyQty ?? null),
+          };
+
+          const { data, error } = await supabase
+            .from("inventory_items")
+            .update(patch)
+            .eq("id", itemId)
+            .eq("inventory_id", currentInventoryId)
+            .select("*")
+            .single();
+
+          if (error) {
+            console.warn("buy update fail:", error.message);
+            return;
+          }
+          if (data) {
+            items = items.map(x => x.id === data.id ? data : x);
+            renderItems();
+          }
+        }, BUY_DEBOUNCE_MS);
+
+        buyTimers.set(itemId, t);
+      }
 
       // pending setup (caso confirm email ON)
       const PENDING_KEY = "pending_inv_setup_v4";
@@ -322,9 +382,35 @@
         return qty <= 0 || (min > 0 && qty <= min);
       }
 
+      // ✅ pill "zerado há..."
+      function zeroAgePill(it) {
+        const qty = Number(it.qty ?? 0);
+        if (qty !== 0) return "";
+        if (!it.last_zero_at) return "";
+        const ago = diffHuman(it.last_zero_at, new Date().toISOString());
+        if (!ago || ago === "—") return "";
+        return ` • <span class="pill neutral">zerado há ${ago}</span>`;
+      }
+
       function showInfo(it) {
-        const d = diffDays(it.last_buy_at, it.last_zero_at);
-        const dur = (d == null) ? "—" : `${d} dia(s)`;
+        const durDays = (it.last_buy_at && it.last_zero_at)
+          ? diffDays(it.last_buy_at, it.last_zero_at)
+          : null;
+
+        let zeroTxt = "—";
+        if (it.last_zero_at) {
+          const lb = it.last_buy_at ? new Date(it.last_buy_at).getTime() : 0;
+          const lz = new Date(it.last_zero_at).getTime();
+          if (!isNaN(lz)) {
+            if (lb && lb > lz) {
+              zeroTxt = diffHuman(it.last_zero_at, it.last_buy_at) + " (até comprar)";
+            } else {
+              zeroTxt = diffHuman(it.last_zero_at, new Date().toISOString()) + " (até agora)";
+            }
+          }
+        }
+
+        const durTxt = (durDays == null) ? "—" : `${durDays} dia(s)`;
 
         const txt =
 `📦 ${it.name}
@@ -341,7 +427,10 @@
 - data: ${fmtDate(it.last_zero_at)}
 
 ⏱️ Duração (última compra → último zerado):
-- ${dur}
+- ${durTxt}
+
+🕳️ Tempo zerado:
+- ${zeroTxt}
 `;
         alert(txt);
       }
@@ -374,7 +463,7 @@
           const star = m.role === "owner" ? " ★" : "";
           left.innerHTML = `
             <div class="name">${m.display_name || "Usuário"}${star}</div>
-            <div class="sub">cargo: ${m.role} • visto: ${fmtDate(m.last_seen_at)}</div>
+            <div class="sub">Visto por último: ${fmtDate(m.last_seen_at)}</div>
           `;
 
           row.appendChild(left);
@@ -416,12 +505,15 @@
           const left = document.createElement("div");
           const needs = needsBuy(it);
           const ess = it.essential ? ' • <span class="pill">essencial</span>' : "";
+          const zeroP = zeroAgePill(it);
+
           left.innerHTML = `
             <div class="name">${it.name}</div>
             <div class="sub">
               ${it.qty} ${it.unit} • mínimo: ${it.min_qty || 0}
               ${needs ? ' • <span class="pill danger">precisa comprar</span>' : ""}
               ${ess}
+              ${zeroP}
             </div>
           `;
 
@@ -561,7 +653,7 @@
         renderMembers();
 
         const me = members.find(m => m.user_id === currentUser.id);
-        $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
+        $("myRolePill").textContent = me?.role ? `Seu cargo: ${me.role}` : "você: —";
       }
 
       async function stopRealtime() {
@@ -688,17 +780,6 @@
           return;
         } catch (e) {
           console.error(e);
-          const msg = (e?.message || "").toLowerCase();
-          const access =
-            msg.includes("permission") ||
-            msg.includes("denied") ||
-            msg.includes("row level") ||
-            msg.includes("not allowed");
-
-          if (access) {
-            toast("Você perdeu acesso a este inventário (removido/excluído). Fale com o admin.", "error", "lost-access");
-            return;
-          }
           toast("Falha ao abrir inventário: " + (e?.message || e), "error", "boot-inv-fail");
           return;
         }
@@ -807,6 +888,10 @@
             renderItems();
 
             toast("Adicionado ✅", "success", "item-add");
+
+            if (Number(data.qty || 0) > 0) {
+              scheduleBuyUpdate(data.id, Number(data.qty || 0));
+            }
           }
 
           $("name").value = "";
@@ -826,14 +911,22 @@
         const it = items.find(x => x.id === itemId);
         if (!it) return;
 
-        const newQty = round(Math.max(0, Number(it.qty || 0) + Number(delta)));
+        const oldQty = Number(it.qty || 0);
+        const newQty = round(Math.max(0, oldQty + Number(delta)));
+        const nowIso = new Date().toISOString();
+
+        const becameZero = (oldQty > 0 && newQty === 0);
+        const wasZeroAndIncreased = (oldQty === 0 && newQty > 0 && Number(delta) > 0);
 
         items = items.map(x => x.id === itemId ? { ...x, qty: newQty } : x);
         renderItems();
 
+        const patch = { qty: newQty };
+        if (becameZero) patch.last_zero_at = nowIso;
+
         const { data, error } = await supabase
           .from("inventory_items")
-          .update({ qty: newQty })
+          .update(patch)
           .eq("id", itemId)
           .eq("inventory_id", currentInventoryId)
           .select("*")
@@ -849,6 +942,10 @@
         if (data) {
           items = items.map(x => x.id === data.id ? data : x);
           renderItems();
+        }
+
+        if (wasZeroAndIncreased) {
+          scheduleBuyUpdate(itemId, round(Number(delta)));
         }
       }
 
