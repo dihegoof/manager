@@ -38,7 +38,7 @@ body{
   position: relative;
 }
 
-/* ✅ background fixo (pra bg-ios existir e não dar treta) */
+/* ✅ background iOS-style fixo (seguro no Xiaomi) */
 .bg-ios{
   position: fixed;
   inset: 0;
@@ -125,6 +125,11 @@ button{
 button:hover{ filter: brightness(.99); }
 button:active{ transform: translateY(1px); }
 
+button:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+
 .small{
   padding: 9px 10px;
   font-size: 13px;
@@ -137,8 +142,7 @@ button.ghost{
   box-shadow: none;
 }
 
-/* ✅ filtro ativo (novo id) + compat (antigo) */
-#filterBtn.active,
+/* filtro ativo */
 #filterList.active{
   background: linear-gradient(180deg, rgba(42,169,255,.22), rgba(42,169,255,.08));
   border-color: rgba(42,169,255,.40);
@@ -218,7 +222,7 @@ button.ghost{
   white-space: nowrap;
 }
 
-/* ✅ NOVA: pill neutra para "zerado há..." */
+/* ✅ pill neutra */
 .pill.neutral{
   background: rgba(91,107,133,.10);
   border-color: rgba(91,107,133,.22);
@@ -377,7 +381,99 @@ button.ghost{
 }
 .footer a:hover{ text-decoration: underline; }
 
+/* =========================
+   FINANÇAS (leve)
+========================= */
+.fin-summary{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fin-card{
+  border: 1px solid rgba(11,18,32,.10);
+  border-radius: 16px;
+  background: rgba(255,255,255,.95);
+  box-shadow: 0 10px 26px rgba(16,24,40,.06);
+  padding: 12px;
+  transform: translateZ(0);
+}
+
+.fin-k{
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.fin-v{
+  font-size: 16px;
+  font-weight: 900;
+  margin-top: 6px;
+}
+
+/* =========================
+   MODAL (owner logs)
+========================= */
+.modal{
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  background: rgba(0,0,0,.25);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 16px;
+}
+
+.modal-card{
+  width: min(860px, 100%);
+  max-height: min(80vh, 720px);
+  overflow:auto;
+  background: rgba(255,255,255,.96);
+  border: 1px solid rgba(11,18,32,.10);
+  border-radius: 18px;
+  box-shadow: 0 18px 60px rgba(16,24,40,.18);
+  padding: 14px;
+}
+
+/* ✅ anexo / link */
+.filelink{
+  font-weight: 900;
+  text-decoration: none;
+  color: #0b3a52;
+}
+.filelink:hover{ text-decoration: underline; }
+
+/* =========================
+   ✅ MOEDA + MODAL PAGAMENTO
+========================= */
+.money-input{
+  font-weight: 900;
+  letter-spacing: -.1px;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, rgba(124,201,255,.12), rgba(255,255,255,.95));
+  border-color: rgba(42,169,255,.35);
+  box-shadow: 0 10px 22px rgba(42,169,255,.10);
+}
+
+.money-input:focus{
+  border-color: rgba(42,169,255,.55);
+  box-shadow: 0 14px 30px rgba(42,169,255,.14);
+}
+
+.modal-actions{
+  justify-content:flex-end;
+}
+
+.modal-actions button{
+  min-width: 120px;
+}
+
 /* responsive */
+@media (max-width: 840px){
+  .fin-summary{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 540px){
   .wrap{ padding: 12px; }
 
@@ -397,5 +493,162 @@ button.ghost{
   }
 
   .qty{
-    min-width: 72px; }
+    min-width: 72px;
+  }
+
+  .fin-summary{ grid-template-columns: 1fr;
+  }
 }
+
+
+/* =========================
+   MOBILE LAYOUT FIXES
+   - organizar botões em grid simétrico
+   - espaçamentos topo (Finanças x código)
+   - controles de itens sem botão sozinho
+========================= */
+@media (max-width: 540px){
+
+  /* ========= Topo (Log / Finanças / Sair) e Inventário ID ========= */
+  /* separa melhor as linhas do header */
+  .header-row{
+    gap: 12px !important;
+    align-items: flex-start !important;
+  }
+
+  /* a linha de botões do topo vira uma “linha” com espaçamento fixo */
+  .header-row > .row{
+    display:flex !important;
+    gap:10px !important;
+    flex-wrap: wrap !important;
+    margin-bottom: 10px !important;
+  }
+
+  /* inventário id não fica colado */
+  #appView .muted{
+    margin-top: 12px !important;
+  }
+  #invCodeShow{
+    margin-left: 8px !important;
+  }
+
+  /* ========= Linha de AÇÕES (Filtrar / Essenciais / Exportar / Importar / Zerar) ========= */
+  /* pega QUALQUER .row que tenha botões pequenos (tuas actions) */
+  .row.actions{
+    display:flex !important;
+    flex-wrap: wrap !important;
+    gap:10px !important;
+  }
+
+  /* força “simetria”: 2 por linha */
+  .row.actions > button{
+    flex: 1 1 calc(50% - 10px) !important;
+    width: calc(50% - 10px) !important;
+    min-width: 0 !important;
+  }
+
+  /* se sobrar 1 botão, ele ocupa a linha toda pra não ficar feio */
+  .row.actions > button:last-child:nth-child(odd){
+    flex-basis: 100% !important;
+    width: 100% !important;
+  }
+
+  /* ========= Controles do ITEM (− ⚙️ ℹ️ 🗑️ [qtd] +) ========= */
+  /* em vez de grid por último filho, faz layout 2 linhas fixas */
+  .controls{
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    justify-content: stretch !important;
+    align-items: stretch !important;
+  }
+
+  .controls button,
+  .controls .qty{
+    width: 100% !important;
+    min-width: 0 !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+
+  .controls .qty{
+    padding: 10px 12px !important;
+  }
+
+  /* o + SEMPRE vai para baixo e vira um “botão largo” */
+  .controls button:last-child{
+    grid-column: 1 / -1 !important;
+  }
+
+  /* deixa os botões com toque confortável */
+  .controls button{
+    padding: 12px 12px !important;
+  }
+}
+
+/* =========================
+   ✅ GRID SIMÉTRICO (Metas / Cartões)
+   - deixa a “linha de inputs + botão” bem alinhada no mobile
+========================= */
+.row.grid3, .row.grid5{
+  display:grid;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+}
+
+.row.grid3{ grid-template-columns: 1fr 1fr 1fr; }
+.row.grid5{ grid-template-columns: 1fr 1fr 1fr 1fr 1fr; }
+
+.w100{ width: 100% !important; min-width: 0 !important; }
+
+.row.grid3 > input,
+.row.grid3 > button,
+.row.grid5 > input,
+.row.grid5 > select,
+.row.grid5 > button{
+  min-width: 0 !important;
+}
+
+@media (max-width: 720px){
+  .row.grid3{ grid-template-columns: 1fr 1fr; }
+  .row.grid3 #goalAdd{ grid-column: 1 / -1; }
+
+  .row.grid5{ grid-template-columns: 1fr 1fr; }
+  .row.grid5 #ccTotal,
+  .row.grid5 #ccPaid{ grid-column: 1 / -1; }
+  .row.grid5 #ccSet{ grid-column: 1 / -1; }
+}
+
+/* === ADD-ON: grids simétricos (Metas e Cartões) + helpers === */
+
+.w100 { width: 100% !important; }
+.grid3, .grid5 { gap: 10px; }
+.row.grid3, .row.grid5 { width: 100%; }
+
+@media (min-width: 721px) {
+  .row.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+  .row.grid5 { display: grid; grid-template-columns: repeat(5, 1fr); align-items: stretch; }
+}
+
+/* Mobile: comportamento parecido com a linha de ações do inventário */
+@media (max-width: 720px) {
+  .row.grid3, .row.grid5 { display: flex; flex-wrap: wrap; }
+  .row.grid3 > *, .row.grid5 > * { flex: 1 1 calc(50% - 10px); min-width: 140px; }
+  .row.grid3 > *:last-child,
+  .row.grid5 > *:last-child { flex-basis: 100%; }
+}
+
+/* Mantém a coluna de botões (controls) alinhada e simétrica */
+.controls {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 120px;
+}
+
+/* checkline (caso não exista no seu CSS atual) */
+.checkline { display: inline-flex; align-items: center; gap: 8px; }
