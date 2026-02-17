@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Inventário da Casa</title>
   <link rel="stylesheet" href="css/style.css">
+  
 </head>
 
 <body>
@@ -15,6 +16,52 @@
 
   <!-- Toast host -->
   <div id="toastHost" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- ✅ MODAL LOGS (owner) -->
+  <div id="logModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Log de ações">
+    <div class="modal-card">
+      <div class="row header-row">
+        <div>
+          <div class="title" style="margin:0;">Log (owner)</div>
+          <div class="muted" id="logMeta">—</div>
+        </div>
+        <div class="row" style="gap:8px;">
+          <button id="logRefresh" class="small" type="button">Atualizar</button>
+          <button id="logClose" class="small ghost" type="button">Fechar</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div id="logList" class="list"></div>
+    </div>
+  </div>
+
+  <!-- ✅ MODAL PAGAMENTO (SUBSTITUI prompt) -->
+  <div id="payModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Registrar pagamento">
+    <div class="modal-card" style="max-width:560px;">
+      <div class="row header-row">
+        <div>
+          <div class="title" style="margin:0;">Registrar pagamento</div>
+          <div class="muted" id="payMeta">—</div>
+        </div>
+        <button id="payX" class="small ghost" type="button" aria-label="Fechar">Fechar</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <input id="payValue" class="money-input" inputmode="numeric" autocomplete="off" placeholder="R$ 0,00">
+      </div>
+
+      <div class="muted" style="margin-top:10px;">
+        Dica: você pode digitar só números (ex: <b>12345</b>) que vira <b>R$ 123,45</b>.
+      </div>
+
+      <div class="row mt12 modal-actions">
+        <button id="payConfirm" type="button">Salvar</button>
+        <button id="payCancel" class="ghost" type="button">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== AUTH ===== -->
   <div id="authView" class="center-screen">
@@ -76,7 +123,13 @@
     <div class="card">
       <div class="row header-row">
         <h1 class="title">Inventário da Casa</h1>
-        <button id="logoutBtn" class="small">Sair</button>
+
+        <!-- topo direito organizado -->
+        <div class="row" style="gap:8px; justify-content:flex-end;">
+          <button id="ownerLogBtn" class="small hidden" type="button" title="Log (owner)">Log</button>
+          <button id="toggleModeBtn" class="small hidden" type="button">Finanças</button>
+          <button id="logoutBtn" class="small">Sair</button>
+        </div>
       </div>
 
       <div class="muted" style="margin-top:6px;">
@@ -86,65 +139,206 @@
 
       <div class="divider"></div>
 
-      <!-- MEMBERS -->
-      <div id="membersBox">
+      <!-- ✅ INVENTÁRIO VIEW -->
+      <div id="inventoryView">
+        <!-- MEMBERS -->
+        <div id="membersBox">
+          <div class="row header-row" style="align-items:flex-end;">
+            <div>
+              <div style="font-weight:900;">Membros</div>
+              <div class="muted" style="margin-top:4px;">Informações:</div>
+            </div>
+            <div class="pill" id="myRolePill" title="Seu cargo">—</div>
+          </div>
+          <div id="membersList" class="list" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- SEARCH -->
+        <div class="row">
+          <input id="search" placeholder="Buscar item" />
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ADD / EDIT -->
+        <div id="editAnchor" class="row">
+          <input id="name" placeholder="Novo item:" />
+          <select id="unit">
+            <option value="un">un</option>
+            <option value="g">g</option>
+            <option value="kg">kg</option>
+            <option value="ml">ml</option>
+            <option value="l">l</option>
+          </select>
+          <input id="qty" type="number" step="0.1" placeholder="Qtd" class="w120" />
+          <input id="min" type="number" step="0.1" placeholder="Mín" class="w120" />
+
+          <label class="checkline" style="align-items:center; gap:8px;">
+            <input id="essential" type="checkbox" />
+            Essencial
+          </label>
+
+          <button id="add">Adicionar</button>
+          <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
+        </div>
+
+        <div class="muted" id="editHint" style="margin-top:8px;">
+          Dica: “Mín” emite alerta ao chegar na quantidade definida.
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ACTIONS -->
+        <div class="row actions">
+          <button class="small" id="filterList">Compras: todos</button>
+          <button class="small" id="filterEssentials">Essenciais: ambos</button>
+          <button class="small" id="exportText">Exportar (texto)</button>
+          <button class="small" id="import">Importar</button>
+          <button class="small" id="clear">Zerar tudo</button>
+        </div>
+
+        <div class="list" id="list"></div>
+      </div>
+
+      <!-- ✅ FINANÇAS VIEW -->
+      <div id="financeView" class="hidden">
         <div class="row header-row" style="align-items:flex-end;">
           <div>
-            <div style="font-weight:900;">Membros</div>
-            <div class="muted" style="margin-top:4px;">Informações:</div>
+            <div style="font-weight:900;">Finanças</div>
+            <div class="muted" style="margin-top:4px;">
+              Lançamentos / metas / cartões ficam no localStorage. Contas/comprovantes + log = Supabase.
+            </div>
           </div>
-          <div class="pill" id="myRolePill" title="Seu cargo">—</div>
+
+          <div class="row" style="gap:8px; justify-content:flex-end;">
+            <button class="small" id="finTabBtn" type="button">Seção: Resumo</button>
+          </div>
         </div>
-        <div id="membersList" class="list" style="margin-top:10px;"></div>
+
+        <div class="divider"></div>
+
+        <!-- ===== RESUMO ===== -->
+        <div id="finTabSummary">
+          <div class="row" style="gap:10px;">
+            <div class="item" style="flex:1; min-width: 220px;">
+              <div>
+                <div class="name">Resumo</div>
+                <div class="sub" id="finSummaryMain">—</div>
+              </div>
+            </div>
+
+            <div class="item" style="flex:1; min-width: 220px;">
+              <div>
+                <div class="name">Cartão de crédito</div>
+                <div class="sub" id="finSummaryCC">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div style="font-weight:900;">Metas da casa</div>
+          <div class="muted" style="margin-top:6px;">
+            Ex: portão elétrico, box do banheiro… você coloca o alvo e vai somando o que já guardou.
+          </div>
+
+          <!-- ✅ SIMÉTRICO -->
+          <div class="row mt12 grid3">
+            <input id="goalName" class="w100" placeholder="Meta (ex: Portão elétrico)" />
+            <input id="goalTarget" class="money-input w100" inputmode="numeric" placeholder="R$ 0,00" />
+            <button id="goalAdd" class="w100">Adicionar</button>
+          </div>
+
+          <div class="list" id="goalList"></div>
+
+          <div class="divider"></div>
+
+          <!-- ✅ CONTAS FIXAS / DÍVIDAS (Supabase) -->
+          <div style="font-weight:900;">Contas / Dívidas (com comprovante)</div>
+          <div class="muted" style="margin-top:6px;">
+            Registre contas fixas (água, luz, financiamento, etc). Quem pagou + valor pago + comprovante.
+          </div>
+
+          <div class="row mt12">
+            <input id="billDesc" placeholder="Conta (ex: Água / Financiamento)" />
+            <input id="billAmount" class="money-input w120" inputmode="numeric" placeholder="R$ 0,00" />
+            <select id="billMonth" class="w120" title="Mês (AAAA-MM)"></select>
+            <button id="billAdd">Adicionar</button>
+          </div>
+
+          <div class="muted" style="margin-top:6px;">
+            * Upload usa Supabase Storage (bucket <b>receipts</b>). Depois te passo as policies.
+          </div>
+
+          <div class="list" id="billList"></div>
+
+          <div class="divider"></div>
+
+          <div class="row actions">
+            <button class="small" id="finExport">Exportar (texto)</button>
+            <button class="small" id="finClear">Zerar finanças</button>
+          </div>
+        </div>
+
+        <!-- ===== LANÇAMENTOS ===== -->
+        <div id="finTabTx" class="hidden">
+          <div style="font-weight:900;">Lançamentos</div>
+          <div class="muted" style="margin-top:6px;">
+            Saída pode ser por Conta/Dinheiro ou por Cartão de crédito.
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row">
+            <select id="finType">
+              <option value="expense">Saída</option>
+              <option value="income">Entrada</option>
+            </select>
+
+            <select id="finMethod" title="Forma">
+              <option value="cash">Conta/Dinheiro</option>
+              <option value="cc">Cartão de crédito</option>
+            </select>
+
+            <input id="finCard" placeholder="Cartão (ex: Nubank)" class="w120" style="display:none;" />
+
+            <input id="finDesc" placeholder="Descrição (ex: mercado, aluguel...)" />
+            <input id="finAmount" class="money-input w120" inputmode="numeric" placeholder="R$ 0,00" />
+            <button id="finAdd">Adicionar</button>
+          </div>
+
+          <div class="muted" id="finTxHint" style="margin-top:10px;"></div>
+
+          <div class="divider"></div>
+
+          <!-- ✅ pagamento mínimo cartão -->
+          <div style="font-weight:900;">Cartões: pagamento mínimo</div>
+          <div class="muted" style="margin-top:6px;">
+            Se você pagar só o mínimo, o resto “rola” pro próximo mês.
+          </div>
+
+          <!-- ✅ SIMÉTRICO -->
+          <div class="row mt12 grid5">
+            <input id="ccName" class="w100" placeholder="Cartão (ex: Nubank)" />
+            <select id="ccMonth" class="w100" title="Mês (AAAA-MM)"></select>
+            <input id="ccTotal" class="money-input w100" inputmode="numeric" placeholder="Total (R$)" />
+            <input id="ccPaid" class="money-input w100" inputmode="numeric" placeholder="Pago (R$)" />
+            <button id="ccSet" class="w100">Salvar</button>
+          </div>
+
+          <div class="list" id="ccList"></div>
+
+          <div class="divider"></div>
+
+          <div class="row actions">
+            <button class="small" id="finExport2">Exportar (texto)</button>
+          </div>
+
+          <div class="list" id="finList"></div>
+        </div>
       </div>
-
-      <div class="divider"></div>
-
-      <!-- SEARCH -->
-      <div class="row">
-        <input id="search" placeholder="Buscar item" />
-      </div>
-
-      <div class="divider"></div>
-
-      <!-- ADD / EDIT -->
-      <div class="row">
-        <input id="name" placeholder="Novo item:" />
-        <select id="unit">
-          <option value="un">un</option>
-          <option value="g">g</option>
-          <option value="kg">kg</option>
-          <option value="ml">ml</option>
-          <option value="l">l</option>
-        </select>
-        <input id="qty" type="number" step="0.1" placeholder="Qtd" class="w120" />
-        <input id="min" type="number" step="0.1" placeholder="Mín" class="w120" />
-
-        <label class="checkline" style="align-items:center; gap:8px;">
-          <input id="essential" type="checkbox" />
-          Essencial
-        </label>
-
-        <button id="add">Adicionar</button>
-        <button id="cancelEdit" class="small ghost hidden" type="button">Cancelar</button>
-      </div>
-
-      <div class="muted" id="editHint" style="margin-top:8px;">
-        Dica: “Mín” emite alerta ao chegar na quantidade definida.
-      </div>
-
-      <div class="divider"></div>
-
-      <!-- ACTIONS (novo esquema) -->
-      <div class="row actions">
-        <button class="small" id="filterBtn">Filtro: nenhum</button>
-        <button class="small" id="sortBtn">Organizar: A→Z</button>
-        <button class="small hidden" id="exportBtn">Exportar (texto)</button>
-        <button class="small" id="import">Importar</button>
-        <button class="small" id="clear">Zerar tudo</button>
-      </div>
-
-      <div class="list" id="list"></div>
     </div>
   </div>
 
@@ -163,7 +357,6 @@
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
-    // ========= READY =========
     const ready = (fn) => (document.readyState === "loading"
       ? document.addEventListener("DOMContentLoaded", fn, { once: true })
       : fn());
@@ -211,6 +404,78 @@
         if (h > 0) return `${h}h ${m}min`;
         return `${m}min`;
       }
+
+      function money(v) {
+        const n = Number(v || 0);
+        return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      }
+
+      // ========= MOEDA (MÁSCARA EM TEMPO REAL) =========
+      function parseMoneyBRL(value) {
+        const s = String(value || "").trim();
+        if (!s) return 0;
+        const digits = s.replace(/[^\d]/g, "");
+        if (!digits) return 0;
+        const cents = parseInt(digits, 10);
+        return cents / 100;
+      }
+
+      function formatMoneyBRLFromDigits(digitsStr) {
+        const digits = (digitsStr || "").replace(/[^\d]/g, "");
+        const cents = digits ? parseInt(digits, 10) : 0;
+        const v = cents / 100;
+        return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      }
+
+      function attachMoneyMask(input) {
+        if (!input) return;
+        const sync = () => {
+          const digits = (input.value || "").replace(/[^\d]/g, "");
+          input.dataset.digits = digits;
+          input.value = formatMoneyBRLFromDigits(digits);
+        };
+
+        sync();
+
+        input.addEventListener("input", () => {
+          const digits = (input.value || "").replace(/[^\d]/g, "");
+          input.dataset.digits = digits;
+          input.value = formatMoneyBRLFromDigits(digits);
+          try { input.setSelectionRange(input.value.length, input.value.length); } catch {}
+        });
+
+        input.addEventListener("blur", () => { sync(); });
+      }
+
+      function initMoneyMasks() {
+        document.querySelectorAll(".money-input").forEach(attachMoneyMask);
+      }
+      initMoneyMasks();
+
+      function monthKey(date = new Date()) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        return `${y}-${m}`;
+      }
+
+      function fillMonthSelect(selId) {
+        const el = $(selId);
+        if (!el) return;
+        el.innerHTML = "";
+        const base = new Date();
+        for (let i = -6; i <= 12; i++) {
+          const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
+          const key = monthKey(d);
+          const opt = document.createElement("option");
+          opt.value = key;
+          opt.textContent = key;
+          el.appendChild(opt);
+        }
+        el.value = monthKey(base);
+      }
+
+      fillMonthSelect("billMonth");
+      fillMonthSelect("ccMonth");
 
       // Footer
       $("footer").innerHTML = `© ${new Date().getFullYear()}
@@ -322,44 +587,119 @@
       let realtimeItems = null;
       let realtimeMembers = null;
 
+      let showOnlyNeeds = false;
+      let essentialFilter = "both"; // both | essential | not
       let editItemId = null;
 
-      // ======= FILTRO / ORDEM (novo) =======
-      // filterMode: none | essential | notEssential | needs
-      let filterMode = "none";
-      // sortMode: az | za | qtyAsc | qtyDesc
-      let sortMode = "az";
+      // owner flag
+      let isOwner = false;
 
-      function filterLabel() {
-        if (filterMode === "none") return "Filtro: nenhum";
-        if (filterMode === "essential") return "Filtro: essenciais";
-        if (filterMode === "notEssential") return "Filtro: não essenciais";
-        return "Filtro: precisa comprar";
+      // ========= LOGS (Supabase) =========
+      let rtLogs = null;
+
+      async function logAction(action, entity, entityId = null, meta = {}) {
+        try {
+          if (!currentInventoryId || !currentUser) return;
+          await supabase.from("inventory_logs").insert({
+            inventory_id: currentInventoryId,
+            actor_user_id: currentUser.id,
+            actor_name: (members.find(m => m.user_id === currentUser.id)?.display_name) || "Usuário",
+            action,
+            entity,
+            entity_id: entityId,
+            meta
+          });
+        } catch (e) {
+          console.warn("logAction fail:", e?.message || e);
+        }
       }
 
-      function sortLabel() {
-        if (sortMode === "az") return "Organizar: A→Z";
-        if (sortMode === "za") return "Organizar: Z→A";
-        if (sortMode === "qtyAsc") return "Organizar: Qtd ↑";
-        return "Organizar: Qtd ↓";
+      async function openLogModal() {
+        if (!isOwner) return;
+        $("logModal").classList.remove("hidden");
+        await loadLogs();
+      }
+      function closeLogModal() {
+        $("logModal").classList.add("hidden");
       }
 
-      function syncActionButtons() {
-        const fb = $("filterBtn");
-        const sb = $("sortBtn");
-        const eb = $("exportBtn");
+      async function loadLogs() {
+        if (!currentInventoryId) return;
+        $("logMeta").textContent = `Inventário: ${currentInventoryId}`;
+        const host = $("logList");
+        host.innerHTML = "";
 
-        fb.textContent = filterLabel();
-        sb.textContent = sortLabel();
+        overlaySafe(true, "load-logs");
+        try {
+          const { data, error } = await withTimeout(
+            supabase.from("inventory_logs")
+              .select("*")
+              .eq("inventory_id", currentInventoryId)
+              .order("created_at", { ascending: false })
+              .limit(200),
+            9000,
+            "load logs"
+          );
+          if (error) throw error;
 
-        const active = (filterMode !== "none");
-        fb.classList.toggle("active", active);
-        eb.classList.toggle("hidden", !active);
+          const rows = Array.isArray(data) ? data : [];
+          if (!rows.length) {
+            const empty = document.createElement("div");
+            empty.className = "sub";
+            empty.textContent = "Sem logs ainda 🙂";
+            host.appendChild(empty);
+            return;
+          }
+
+          for (const r of rows) {
+            const row = document.createElement("div");
+            row.className = "item";
+            row.innerHTML = `
+              <div>
+                <div class="name">${r.action} • ${r.entity}</div>
+                <div class="sub">
+                  <span class="pill">${r.actor_name || "Usuário"}</span>
+                  • ${fmtDate(r.created_at)}
+                  ${r.entity_id ? `• id: ${r.entity_id}` : ""}
+                </div>
+                ${r.meta ? `<div class="muted" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(JSON.stringify(r.meta))}</div>` : ""}
+              </div>
+            `;
+            host.appendChild(row);
+          }
+        } catch (e) {
+          console.error(e);
+          toast("Falha ao carregar logs: " + (e?.message || e), "error", "log-load-fail");
+        } finally {
+          overlaySafe(false, "load-logs");
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      async function startRealtimeLogs(invId) {
+        try { if (rtLogs) await supabase.removeChannel(rtLogs); } catch {}
+        rtLogs = supabase
+          .channel("rt-logs-" + invId)
+          .on("postgres_changes", {
+            event: "INSERT",
+            schema: "public",
+            table: "inventory_logs",
+            filter: `inventory_id=eq.${invId}`,
+          }, (_payload) => {
+            if (!$("logModal").classList.contains("hidden")) loadLogs();
+          })
+          .subscribe();
       }
 
       // ======= HISTÓRICO (debounce compra) =======
       const BUY_DEBOUNCE_MS = 6000;
-      const buyTimers = new Map(); // itemId -> timeoutId
+      const buyTimers = new Map();
 
       function scheduleBuyUpdate(itemId, buyQty) {
         const prev = buyTimers.get(itemId);
@@ -396,12 +736,14 @@
             items = items.map(x => x.id === data.id ? data : x);
             renderItems();
           }
+
+          logAction("BUY_MARK", "inventory_items", itemId, { buyQty });
         }, BUY_DEBOUNCE_MS);
 
         buyTimers.set(itemId, t);
       }
 
-      // pending setup (caso confirm email ON)
+      // pending setup
       const PENDING_KEY = "pending_inv_setup_v4";
       const setPending = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
       const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch { return null; } };
@@ -413,7 +755,6 @@
         return qty <= 0 || (min > 0 && qty <= min);
       }
 
-      // ✅ pill "zerado há..."
       function zeroAgePill(it) {
         const qty = Number(it.qty ?? 0);
         if (qty !== 0) return "";
@@ -466,6 +807,666 @@
         alert(txt);
       }
 
+      // ========= MODE: INVENTÁRIO / FINANÇAS =========
+      function setMode(mode) {
+        const inv = $("inventoryView");
+        const fin = $("financeView");
+        const btn = $("toggleModeBtn");
+
+        if (mode === "finance") {
+          inv.classList.add("hidden");
+          fin.classList.remove("hidden");
+          btn.textContent = "Inventário";
+          ensureFinanceLoaded();
+          renderFinanceAll();
+          loadBills();
+        } else {
+          fin.classList.add("hidden");
+          inv.classList.remove("hidden");
+          btn.textContent = "Finanças";
+        }
+      }
+
+      // ========= FINANÇAS (modo local) =========
+      let financeLoaded = false;
+      let finTx = [];
+      let finGoals = [];
+      let finCC = [];
+
+      // ✅ sem "beta" nas keys + migração automática (não perde dados antigos)
+      function finKeyTx() { return `fin_tx_${currentInventoryId || "none"}`; }
+      function finKeyGoals() { return `fin_goals_${currentInventoryId || "none"}`; }
+      function finKeyCC() { return `fin_cc_${currentInventoryId || "none"}`; }
+
+      function finOldKeyTx() { return `fin_beta_tx_${currentInventoryId || "none"}`; }
+      function finOldKeyGoals() { return `fin_beta_goals_${currentInventoryId || "none"}`; }
+      function finOldKeyCC() { return `fin_beta_cc_${currentInventoryId || "none"}`; }
+
+      function finSave() {
+        try { localStorage.setItem(finKeyTx(), JSON.stringify(finTx)); } catch {}
+        try { localStorage.setItem(finKeyGoals(), JSON.stringify(finGoals)); } catch {}
+        try { localStorage.setItem(finKeyCC(), JSON.stringify(finCC)); } catch {}
+      }
+
+      function safeParseLS(key) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          return parsed;
+        } catch { return null; }
+      }
+
+      function finLoad() {
+        // TX
+        let tx = safeParseLS(finKeyTx());
+        if (!Array.isArray(tx)) tx = safeParseLS(finOldKeyTx());
+        finTx = Array.isArray(tx) ? tx : [];
+
+        // GOALS
+        let goals = safeParseLS(finKeyGoals());
+        if (!Array.isArray(goals)) goals = safeParseLS(finOldKeyGoals());
+        finGoals = Array.isArray(goals) ? goals : [];
+
+        // CC
+        let cc = safeParseLS(finKeyCC());
+        if (!Array.isArray(cc)) cc = safeParseLS(finOldKeyCC());
+        finCC = Array.isArray(cc) ? cc : [];
+
+        // migra pra chave nova se veio das antigas
+        finSave();
+      }
+
+      function ensureFinanceLoaded() {
+        if (financeLoaded) return;
+        financeLoaded = true;
+        finLoad();
+        syncFinMethodUI();
+      }
+
+      function uuid() {
+        return crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+      }
+
+      function calcFinance() {
+        let income = 0;
+        let expense = 0;
+        let ccExpense = 0;
+
+        for (const t of finTx) {
+          const amt = Number(t.amount || 0);
+          if (t.type === "income") income += amt;
+          else {
+            expense += amt;
+            if (t.method === "cc") ccExpense += amt;
+          }
+        }
+
+        let carry = 0;
+        for (const c of finCC) {
+          const total = Number(c.total || 0);
+          const paid = Number(c.paid || 0);
+          const rest = Math.max(0, total - paid);
+          carry += rest;
+        }
+
+        const available = income - expense;
+        return { income, expense, available, ccExpense, carry };
+      }
+
+      function renderFinanceSummary() {
+        const { income, expense, available, ccExpense, carry } = calcFinance();
+
+        $("finSummaryMain").innerHTML = `
+          <span class="pill good">Entrou: ${money(income)}</span>
+          <span class="pill danger">Saiu: ${money(expense)}</span>
+          <span class="pill">Disponível: ${money(available)}</span>
+        `;
+
+        $("finSummaryCC").innerHTML = `
+          <span class="pill">Compras no cartão: ${money(ccExpense)}</span>
+          <span class="pill neutral">Resto (mínimo): ${money(carry)}</span>
+        `;
+      }
+
+      function renderGoals() {
+        const host = $("goalList");
+        host.innerHTML = "";
+
+        if (!finGoals.length) {
+          const empty = document.createElement("div");
+          empty.className = "sub";
+          empty.textContent = "Sem metas ainda 🙂";
+          host.appendChild(empty);
+          return;
+        }
+
+        const sorted = finGoals.slice().sort((a,b) => (b.created_at||"").localeCompare((a.created_at||"")));
+
+        for (const g of sorted) {
+          const target = Number(g.target || 0);
+          const saved = Number(g.saved || 0);
+          const left = Math.max(0, target - saved);
+          const pct = target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0;
+
+          const row = document.createElement("div");
+          row.className = "item";
+
+          const leftBox = document.createElement("div");
+          leftBox.innerHTML = `
+            <div class="name">${g.name || "Meta"}</div>
+            <div class="sub">
+              <span class="pill">Alvo: ${money(target)}</span>
+              <span class="pill good">Guardado: ${money(saved)}</span>
+              <span class="pill">Falta: ${money(left)}</span>
+              <span class="pill">${pct}%</span>
+            </div>
+          `;
+
+          const controls = document.createElement("div");
+          controls.className = "controls";
+
+          const addBtn = document.createElement("button");
+          addBtn.textContent = "+";
+          addBtn.title = "Adicionar valor guardado";
+          addBtn.onclick = () => {
+            const v = prompt(`Quanto você quer somar na meta "${g.name}"? (R$)`, "0");
+            if (v == null) return;
+            const n = Number(String(v).replace(",", "."));
+            if (!n || n <= 0) return toast("Informe um valor > 0.", "warn", "goal-add-val");
+            finGoals = finGoals.map(x => x.id === g.id ? { ...x, saved: Math.round((Number(x.saved||0) + n) * 100) / 100 } : x);
+            finSave();
+            renderGoals();
+            renderFinanceSummary();
+            toast("Meta atualizada ✅", "success", "goal-upd");
+            logAction("GOAL_ADD_SAVED", "fin_goal", g.id, { add: n });
+          };
+
+          const del = document.createElement("button");
+          del.textContent = "🗑️";
+          del.title = "Excluir meta";
+          del.onclick = () => {
+            if (!confirm(`Excluir a meta "${g.name}"?`)) return;
+            finGoals = finGoals.filter(x => x.id !== g.id);
+            finSave();
+            renderGoals();
+            toast("Meta excluída ✅", "success", "goal-del");
+            logAction("GOAL_DELETE", "fin_goal", g.id, { name: g.name });
+          };
+
+          controls.append(addBtn, del);
+          row.append(leftBox, controls);
+          host.appendChild(row);
+        }
+      }
+
+      function renderFinanceTx() {
+        const host = $("finList");
+        host.innerHTML = "";
+
+        const sorted = finTx.slice().sort((a,b) => (b.created_at||"").localeCompare((a.created_at||"")));
+
+        if (!sorted.length) {
+          const empty = document.createElement("div");
+          empty.className = "sub";
+          empty.textContent = "Sem lançamentos ainda 🙂";
+          host.appendChild(empty);
+          return;
+        }
+
+        for (const t of sorted) {
+          const row = document.createElement("div");
+          row.className = "item";
+
+          const left = document.createElement("div");
+
+          const sign = t.type === "income" ? "+" : "−";
+          const pillCls = t.type === "income" ? "pill good" : "pill danger";
+          const methodLabel = t.method === "cc"
+            ? `cartão${t.card ? `: ${t.card}` : ""}`
+            : "conta/dinheiro";
+
+          left.innerHTML = `
+            <div class="name">${t.desc || "(sem descrição)"}</div>
+            <div class="sub">
+              <span class="${pillCls}">${sign} ${money(t.amount)}</span>
+              • ${methodLabel}
+              • ${fmtDate(t.created_at)}
+            </div>
+          `;
+
+          const controls = document.createElement("div");
+          controls.className = "controls";
+
+          const del = document.createElement("button");
+          del.textContent = "🗑️";
+          del.title = isOwner ? "Excluir lançamento" : "Somente owner pode excluir lançamentos";
+          del.disabled = !isOwner; // ✅ membros NÃO podem excluir lançamentos
+          del.onclick = () => {
+            if (!isOwner) return toast("Somente o owner pode excluir lançamentos.", "warn", "fin-del-owner");
+            if (!confirm("Excluir este lançamento?")) return;
+            finTx = finTx.filter(x => x.id !== t.id);
+            finSave();
+            renderFinanceAll();
+            toast("Excluído ✅", "success", "fin-del");
+            logAction("FIN_TX_DELETE", "fin_tx", t.id, { desc: t.desc, amount: t.amount });
+          };
+
+          controls.appendChild(del);
+          row.append(left, controls);
+          host.appendChild(row);
+        }
+      }
+
+      function renderCC() {
+        const host = $("ccList");
+        host.innerHTML = "";
+
+        const sorted = finCC.slice().sort((a,b) => (b.month||"").localeCompare((a.month||"")) || (a.card||"").localeCompare((b.card||""), "pt-BR"));
+
+        if (!sorted.length) {
+          const empty = document.createElement("div");
+          empty.className = "sub";
+          empty.textContent = "Sem faturas registradas 🙂";
+          host.appendChild(empty);
+          return;
+        }
+
+        for (const c of sorted) {
+          const total = Number(c.total||0);
+          const paid = Number(c.paid||0);
+          const rest = Math.max(0, total - paid);
+
+          const row = document.createElement("div");
+          row.className = "item";
+
+          row.innerHTML = `
+            <div>
+              <div class="name">${c.card} • ${c.month}</div>
+              <div class="sub">
+                <span class="pill">Total: ${money(total)}</span>
+                <span class="pill good">Pago: ${money(paid)}</span>
+                <span class="pill neutral">Resto: ${money(rest)}</span>
+              </div>
+            </div>
+          `;
+
+          const controls = document.createElement("div");
+          controls.className = "controls";
+
+          const del = document.createElement("button");
+          del.textContent = "🗑️";
+          del.title = "Remover fatura";
+          del.onclick = () => {
+            if (!confirm("Remover este registro?")) return;
+            finCC = finCC.filter(x => x.id !== c.id);
+            finSave();
+            renderFinanceAll();
+            toast("Removido ✅", "success", "cc-del");
+            logAction("CC_DELETE", "fin_cc", c.id, { card: c.card, month: c.month });
+          };
+
+          controls.appendChild(del);
+          row.appendChild(controls);
+          host.appendChild(row);
+        }
+      }
+
+      function renderFinanceAll() {
+        renderFinanceSummary();
+        renderGoals();
+        renderFinanceTx();
+        renderCC();
+        updateFinHint();
+      }
+
+      function updateFinHint() {
+        const { income, expense, available, ccExpense, carry } = calcFinance();
+        $("finTxHint").textContent =
+          `Entrou: ${money(income)}  •  Saiu: ${money(expense)}  •  Disponível: ${money(available)}  •  Cartão: ${money(ccExpense)}  •  Resto: ${money(carry)}`;
+      }
+
+      function finExportText() {
+        const { income, expense, available, ccExpense, carry } = calcFinance();
+        const sortedTx = finTx.slice().sort((a,b) => (a.created_at||"").localeCompare((b.created_at||"")));
+        const sortedGoals = finGoals.slice().sort((a,b) => (a.created_at||"").localeCompare((b.created_at||"")));
+        const sortedCC = finCC.slice().sort((a,b) => (a.month||"").localeCompare((b.month||"")));
+
+        const lines = [];
+        lines.push("=== FINANÇAS ===");
+        lines.push(`Entrou: ${money(income)} | Saiu: ${money(expense)} | Disponível: ${money(available)} | Cartão: ${money(ccExpense)} | Resto(mínimo): ${money(carry)}`);
+        lines.push("");
+
+        lines.push("=== LANÇAMENTOS ===");
+        for (const t of sortedTx) {
+          const sign = t.type === "income" ? "+" : "-";
+          const m = t.method === "cc" ? `cartão${t.card ? `:${t.card}` : ""}` : "conta/dinheiro";
+          lines.push(`- ${fmtDate(t.created_at)} | ${sign} ${money(t.amount)} | ${m} | ${t.desc || ""}`);
+        }
+        lines.push("");
+
+        lines.push("=== CARTÕES (PAGAMENTO MÍNIMO) ===");
+        for (const c of sortedCC) {
+          const total = Number(c.total||0);
+          const paid = Number(c.paid||0);
+          const rest = Math.max(0, total - paid);
+          lines.push(`- ${c.card} | ${c.month} | total ${money(total)} | pago ${money(paid)} | resto ${money(rest)}`);
+        }
+        lines.push("");
+
+        lines.push("=== METAS ===");
+        for (const g of sortedGoals) {
+          const target = Number(g.target||0);
+          const saved = Number(g.saved||0);
+          const left = Math.max(0, target - saved);
+          lines.push(`- ${g.name}: alvo ${money(target)} | guardado ${money(saved)} | falta ${money(left)}`);
+        }
+
+        const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "financas.txt";
+        a.click();
+        URL.revokeObjectURL(url);
+        toast("Exportado ✅", "success", "fin-export");
+      }
+
+      function syncFinMethodUI() {
+        const method = $("finMethod").value;
+        const card = $("finCard");
+        if (method === "cc") {
+          card.style.display = "";
+          card.placeholder = "Cartão (ex: Nubank)";
+        } else {
+          card.style.display = "none";
+          card.value = "";
+        }
+      }
+
+      // ========= "ABA" / SEÇÃO FINANÇAS =========
+      let finTab = "summary"; // summary | tx
+      function setFinTab(t) {
+        finTab = t;
+        const sum = $("finTabSummary");
+        const tx = $("finTabTx");
+        if (t === "tx") {
+          sum.classList.add("hidden");
+          tx.classList.remove("hidden");
+          $("finTabBtn").textContent = "Seção: Lançamentos";
+        } else {
+          tx.classList.add("hidden");
+          sum.classList.remove("hidden");
+          $("finTabBtn").textContent = "Seção: Resumo";
+        }
+      }
+
+      // ========= CONTAS / DÍVIDAS (Supabase) =========
+      let bills = [];
+
+      async function loadBills() {
+        if (!currentInventoryId) return;
+        const host = $("billList");
+        host.innerHTML = "";
+        const loading = document.createElement("div");
+        loading.className = "sub";
+        loading.textContent = "Carregando contas...";
+        host.appendChild(loading);
+
+        try {
+          const { data, error } = await withTimeout(
+            supabase.from("finance_bills")
+              .select("*")
+              .eq("inventory_id", currentInventoryId)
+              .order("month", { ascending: false })
+              .order("created_at", { ascending: false }),
+            9000,
+            "load bills"
+          );
+          if (error) throw error;
+          bills = Array.isArray(data) ? data : [];
+          renderBills();
+        } catch (e) {
+          host.innerHTML = "";
+          const err = document.createElement("div");
+          err.className = "sub";
+          err.textContent = "Falha ao carregar contas (verifique SQL/policies).";
+          host.appendChild(err);
+        }
+      }
+
+      function canEditBill(b) {
+        if (isOwner) return true;
+        return b?.payer_user_id === currentUser?.id;
+      }
+
+      // ========= MODAL PAGAMENTO (controlador) =========
+      let payCtx = null; // { bill, wantPaid }
+
+      function openPayModal(bill, wantPaid) {
+        payCtx = { bill, wantPaid };
+
+        $("payMeta").textContent =
+          `${bill.description || "Conta"} • ${bill.month} • valor: ${money(bill.amount || 0)}`;
+
+        const startValue = (bill.paid_amount ?? bill.amount ?? 0);
+        const digits = String(Math.round(Number(startValue || 0) * 100));
+        $("payValue").dataset.digits = digits;
+        $("payValue").value = formatMoneyBRLFromDigits(digits);
+
+        $("payModal").classList.remove("hidden");
+        requestAnimationFrame(() => {
+          $("payValue").focus();
+          try { $("payValue").setSelectionRange($("payValue").value.length, $("payValue").value.length); } catch {}
+        });
+      }
+
+      function closePayModal() {
+        $("payModal").classList.add("hidden");
+        payCtx = null;
+      }
+
+      async function confirmPayModal() {
+        if (!payCtx?.bill) return closePayModal();
+        const b = payCtx.bill;
+        const wantPaid = !!payCtx.wantPaid;
+
+        const paidAmount = parseMoneyBRL($("payValue").value);
+
+        if (paidAmount < 0) return toast("Valor inválido.", "warn", "bill-paid-invalid-modal");
+
+        const patch = wantPaid
+          ? {
+              paid_at: new Date().toISOString(),
+              payer_user_id: currentUser.id,
+              payer_name: (members.find(m => m.user_id === currentUser.id)?.display_name) || "Usuário",
+              paid_amount: Math.round(paidAmount * 100) / 100,
+            }
+          : {
+              paid_at: null,
+              paid_amount: 0,
+              receipt_url: null,
+              receipt_path: null,
+              payer_user_id: null,
+              payer_name: null,
+            };
+
+        overlaySafe(true, "update-bill-modal");
+        try {
+          const { data, error } = await withTimeout(
+            supabase.from("finance_bills")
+              .update(patch)
+              .eq("id", b.id)
+              .eq("inventory_id", currentInventoryId)
+              .select("*")
+              .single(),
+            9000,
+            "update bill"
+          );
+          if (error) throw error;
+
+          bills = bills.map(x => x.id === data.id ? data : x);
+          renderBills();
+          toast("Atualizado ✅", "success", "bill-upd");
+          closePayModal();
+        } catch (e) {
+          console.error(e);
+          toast("Falha ao atualizar conta: " + (e?.message || e), "error", "bill-upd-fail");
+        } finally {
+          overlaySafe(false, "update-bill-modal");
+        }
+      }
+
+      function renderBills() {
+        const host = $("billList");
+        host.innerHTML = "";
+
+        if (!bills.length) {
+          const empty = document.createElement("div");
+          empty.className = "sub";
+          empty.textContent = "Sem contas ainda 🙂";
+          host.appendChild(empty);
+          return;
+        }
+
+        for (const b of bills) {
+          const row = document.createElement("div");
+          row.className = "item";
+
+          const payerName = b.payer_name || "—";
+          const paid = !!b.paid_at;
+
+          const receiptLink = b.receipt_url
+            ? `<a class="filelink" href="${b.receipt_url}" target="_blank" rel="noopener">ver comprovante</a>`
+            : `<span class="muted">sem comprovante</span>`;
+
+          const left = document.createElement("div");
+          left.innerHTML = `
+            <div class="name">${b.description || "Conta"}</div>
+            <div class="sub">
+              <span class="pill">${b.month}</span>
+              <span class="pill ${paid ? "good" : "danger"}">${paid ? "pago" : "pendente"}</span>
+              <span class="pill">valor: ${money(b.amount)}</span>
+              <span class="pill neutral">pago: ${money(b.paid_amount || 0)}</span>
+              • pagou: ${payerName}
+              • ${receiptLink}
+            </div>
+          `;
+
+          const controls = document.createElement("div");
+          controls.className = "controls";
+
+          const payBtn = document.createElement("button");
+          payBtn.textContent = paid ? "✔" : "💳";
+          payBtn.title = paid ? "Marcar como não pago" : "Marcar como pago";
+          payBtn.disabled = !canEditBill(b);
+          payBtn.onclick = async () => {
+            if (!canEditBill(b)) return;
+
+            const wantPaid = !paid;
+
+            if (!wantPaid) {
+              if (!confirm("Marcar como NÃO pago? Isso remove valor pago e comprovante.")) return;
+              payCtx = { bill: b, wantPaid: false };
+              await confirmPayModal();
+              return;
+            }
+
+            openPayModal(b, true);
+          };
+
+          const attachBtn = document.createElement("button");
+          attachBtn.textContent = "📎";
+          attachBtn.title = "Anexar comprovante";
+          attachBtn.disabled = !canEditBill(b) || !b.paid_at;
+          attachBtn.onclick = () => pickAndUploadReceipt(b);
+
+          const del = document.createElement("button");
+          del.textContent = "🗑️";
+          del.title = "Excluir conta";
+          del.disabled = !isOwner;
+          del.onclick = async () => {
+            if (!isOwner) return toast("Somente o owner.", "warn", "bill-del-owner");
+            if (!confirm("Excluir esta conta?")) return;
+            try {
+              const { error } = await withTimeout(
+                supabase.from("finance_bills")
+                  .delete()
+                  .eq("id", b.id)
+                  .eq("inventory_id", currentInventoryId),
+                9000,
+                "delete bill"
+              );
+              if (error) throw error;
+              bills = bills.filter(x => x.id !== b.id);
+              renderBills();
+              toast("Excluída ✅", "success", "bill-del");
+            } catch (e) {
+              console.error(e);
+              toast("Falha ao excluir conta: " + (e?.message || e), "error", "bill-del-fail");
+            }
+          };
+
+          controls.append(payBtn, attachBtn, del);
+          row.append(left, controls);
+          host.appendChild(row);
+        }
+      }
+
+      async function pickAndUploadReceipt(bill) {
+        const inp = document.createElement("input");
+        inp.type = "file";
+        inp.accept = "application/pdf,image/*";
+        inp.onchange = async () => {
+          const file = inp.files?.[0];
+          if (!file) return;
+
+          overlaySafe(true, "upload-receipt");
+          try {
+            const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+            const safeName = `receipt_${Date.now()}.${ext}`;
+            const path = `${currentInventoryId}/${bill.id}/${safeName}`;
+
+            const { error: upErr } = await withTimeout(
+              supabase.storage.from("receipts").upload(path, file, {
+                cacheControl: "3600",
+                upsert: true,
+              }),
+              20000,
+              "upload receipt"
+            );
+            if (upErr) throw upErr;
+
+            const { data: pub } = supabase.storage.from("receipts").getPublicUrl(path);
+            const url = pub?.publicUrl || null;
+
+            const patch = { receipt_path: path, receipt_url: url };
+            const { data, error } = await withTimeout(
+              supabase.from("finance_bills")
+                .update(patch)
+                .eq("id", bill.id)
+                .eq("inventory_id", currentInventoryId)
+                .select("*")
+                .single(),
+              9000,
+              "update receipt url"
+            );
+            if (error) throw error;
+
+            bills = bills.map(x => x.id === data.id ? data : x);
+            renderBills();
+            toast("Comprovante anexado ✅", "success", "receipt-ok");
+          } catch (e) {
+            console.error(e);
+            toast("Falha no anexo: " + (e?.message || e), "error", "receipt-fail");
+            toast("Dica: confira se o bucket 'receipts' existe e as policies de storage.", "warn", "receipt-tip");
+          } finally {
+            overlaySafe(false, "upload-receipt");
+          }
+        };
+        inp.click();
+      }
+
       // ========= RENDER MEMBERS =========
       function renderMembers() {
         const host = $("membersList");
@@ -502,55 +1503,34 @@
         }
       }
 
-      // ======= lista visível (busca + filtro + ordem) =======
-      function getVisibleItems() {
-        const q = norm($("search").value);
-
-        let filtered = items.filter(it => {
-          const matchesSearch = !q || (it.name_norm || "").includes(q);
-
-          let matchesFilter = true;
-          if (filterMode === "essential") matchesFilter = !!it.essential;
-          else if (filterMode === "notEssential") matchesFilter = !it.essential;
-          else if (filterMode === "needs") matchesFilter = needsBuy(it);
-
-          return matchesSearch && matchesFilter;
-        });
-
-        // ordenar
-        if (sortMode === "az" || sortMode === "za") {
-          filtered.sort((a,b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
-          if (sortMode === "za") filtered.reverse();
-        } else if (sortMode === "qtyAsc" || sortMode === "qtyDesc") {
-          filtered.sort((a,b) => {
-            const qa = Number(a.qty ?? 0);
-            const qb = Number(b.qty ?? 0);
-            // desempate por nome pra ficar estável
-            if (qa === qb) return (a.name || "").localeCompare((b.name || ""), "pt-BR");
-            return qa - qb;
-          });
-          if (sortMode === "qtyDesc") filtered.reverse();
-        }
-
-        return filtered;
-      }
-
       // ========= RENDER ITEMS =========
       function renderItems() {
+        const q = norm($("search").value);
         const list = $("list");
         list.innerHTML = "";
 
-        const visible = getVisibleItems();
+        let filtered = items
+          .filter(it => {
+            const matchesSearch = !q || (it.name_norm || "").includes(q);
+            const matchesNeeds = !showOnlyNeeds || needsBuy(it);
 
-        if (!visible.length) {
+            let matchesEssential = true;
+            if (essentialFilter === "essential") matchesEssential = !!it.essential;
+            if (essentialFilter === "not") matchesEssential = !it.essential;
+
+            return matchesSearch && matchesNeeds && matchesEssential;
+          })
+          .sort((a,b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
+
+        if (!filtered.length) {
           const empty = document.createElement("div");
           empty.className = "sub";
-          empty.textContent = (filterMode === "needs") ? "Nenhum item precisa comprar 🙂" : "Nada por aqui 🙂";
+          empty.textContent = showOnlyNeeds ? "Nenhum item precisa comprar 🙂" : "Nada por aqui 🙂";
           list.appendChild(empty);
           return;
         }
 
-        for (const it of visible) {
+        for (const it of filtered) {
           const row = document.createElement("div");
           row.className = "item";
 
@@ -588,7 +1568,8 @@
 
           const del = document.createElement("button");
           del.textContent = "🗑️";
-          del.title = "Excluir";
+          del.title = isOwner ? "Excluir" : "Somente owner pode excluir";
+          del.disabled = !isOwner;
           del.onclick = () => deleteItem(it.id, it.name);
 
           const qty = document.createElement("div");
@@ -706,13 +1687,22 @@
 
         const me = members.find(m => m.user_id === currentUser.id);
         $("myRolePill").textContent = me?.role ? `Seu cargo: ${me.role}` : "você: —";
+
+        isOwner = (me?.role === "owner");
+
+        $("ownerLogBtn").classList.toggle("hidden", !isOwner);
+
+        // ✅ Finanças liberado pra membros (botão sempre visível)
+        $("toggleModeBtn").classList.remove("hidden");
       }
 
       async function stopRealtime() {
         try { if (realtimeItems) await supabase.removeChannel(realtimeItems); } catch {}
         try { if (realtimeMembers) await supabase.removeChannel(realtimeMembers); } catch {}
+        try { if (rtLogs) await supabase.removeChannel(rtLogs); } catch {}
         realtimeItems = null;
         realtimeMembers = null;
+        rtLogs = null;
       }
 
       async function startRealtime(invId) {
@@ -757,14 +1747,28 @@
             renderMembers();
 
             const me = members.find(m => m.user_id === currentUser.id);
-            $("myRolePill").textContent = me?.role ? `você: ${me.role}` : "você: —";
+            $("myRolePill").textContent = me?.role ? `Seu cargo: ${me.role}` : "você: —";
+
+            isOwner = (me?.role === "owner");
+            $("ownerLogBtn").classList.toggle("hidden", !isOwner);
+
+            // ✅ manter Finanças liberado (botão visível)
+            $("toggleModeBtn").classList.remove("hidden");
           })
           .subscribe();
+
+        await startRealtimeLogs(invId);
       }
 
       async function bootInventory(invId) {
         currentInventoryId = invId;
         showApp();
+
+        financeLoaded = false;
+        finTx = [];
+        finGoals = [];
+        finCC = [];
+        bills = [];
 
         overlaySafe(true, "boot");
         try {
@@ -772,6 +1776,10 @@
           await Promise.all([ loadItems(invId), loadMembers(invId) ]);
           await startRealtime(invId);
           toast("Sincronizado ✅", "success", "synced");
+
+          setMode("inventory");
+          setFinTab("summary");
+          logAction("BOOT", "app", null, { inventory_id: invId });
         } finally {
           overlaySafe(false, "boot");
         }
@@ -863,13 +1871,45 @@
       // ========= ITEMS CRUD =========
       function resetEdit() {
         editItemId = null;
+
+        $("name").value = "";
+        $("unit").value = "un";
+        $("qty").value = "";
+        $("min").value = "";
+        $("essential").checked = false;
+
         $("cancelEdit").classList.add("hidden");
         $("add").textContent = "Adicionar";
         $("editHint").textContent = "Dica: “Mín” emite alerta ao chegar na quantidade definida.";
       }
 
+      function isMobile() {
+        return window.matchMedia("(max-width: 720px)").matches || "ontouchstart" in window;
+      }
+
+      function scrollToEditorAndFocus() {
+        const el = document.getElementById("name");
+        if (!el) return;
+
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+        setTimeout(() => {
+          const y = el.getBoundingClientRect().top + window.scrollY - 12;
+          window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+        }, 220);
+
+        setTimeout(() => {
+          try {
+            el.focus({ preventScroll: true });
+            const len = el.value?.length ?? 0;
+            el.setSelectionRange(len, len);
+          } catch {}
+        }, 520);
+      }
+
       function startEdit(it) {
         editItemId = it.id;
+
         $("name").value = it.name || "";
         $("unit").value = it.unit || "un";
         $("qty").value = it.qty ?? 0;
@@ -879,84 +1919,8 @@
         $("cancelEdit").classList.remove("hidden");
         $("add").textContent = "Salvar";
         $("editHint").textContent = "Editando item — altere os campos e clique em Salvar.";
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
 
-      async function upsertItem() {
-        if (!currentUser || !currentInventoryId) return;
-
-        const name = $("name").value.trim();
-        const unit = $("unit").value;
-        const qty = round(Number($("qty").value || 0));
-        const minQty = round(Number($("min").value || 0));
-        const essential = !!$("essential").checked;
-
-        if (!name) return toast("Informe o nome do item.", "warn", "need-name");
-
-        const payload = {
-          inventory_id: currentInventoryId,
-          name,
-          name_norm: norm(name),
-          unit,
-          qty,
-          min_qty: minQty,
-          essential,
-        };
-
-        overlaySafe(true, "upsert-item");
-        try {
-          if (editItemId) {
-            const { data, error } = await withTimeout(
-              supabase.from("inventory_items")
-                .update(payload)
-                .eq("id", editItemId)
-                .eq("inventory_id", currentInventoryId)
-                .select("*")
-                .single(),
-              8000,
-              "update item"
-            );
-            if (error) throw error;
-
-            items = items.map(x => x.id === data.id ? data : x);
-            renderItems();
-
-            toast("Atualizado ✅", "success", "item-upd");
-            resetEdit();
-          } else {
-            payload.created_by = currentUser.id;
-
-            const { data, error } = await withTimeout(
-              supabase.from("inventory_items")
-                .insert(payload)
-                .select("*")
-                .single(),
-              8000,
-              "insert item"
-            );
-            if (error) throw error;
-
-            items = [data, ...items.filter(x => x.id !== data.id)];
-            renderItems();
-
-            toast("Adicionado ✅", "success", "item-add");
-
-            if (Number(data.qty || 0) > 0) {
-              scheduleBuyUpdate(data.id, Number(data.qty || 0));
-            }
-          }
-
-          $("name").value = "";
-          $("qty").value = "";
-          $("min").value = "";
-          $("essential").checked = false;
-
-        } catch (e) {
-          console.error(e);
-          toast("Falha ao salvar: " + (e?.message || e), "error", "save-fail");
-        } finally {
-          overlaySafe(false, "upsert-item");
-        }
+        if (isMobile()) scrollToEditorAndFocus();
       }
 
       async function changeQty(itemId, delta) {
@@ -996,6 +1960,8 @@
           renderItems();
         }
 
+        logAction("ITEM_QTY_CHANGE", "inventory_items", itemId, { from: oldQty, to: newQty, delta });
+
         if (wasZeroAndIncreased) {
           scheduleBuyUpdate(itemId, round(Number(delta)));
         }
@@ -1003,6 +1969,11 @@
 
       async function deleteItem(itemId, name = "") {
         if (!currentInventoryId) return;
+
+        if (!isOwner) {
+          toast("Somente o owner pode excluir itens.", "warn", "del-owner-only");
+          return;
+        }
 
         const label = name ? `“${name}”` : "este item";
         if (!confirm(`Excluir ${label}?`)) return;
@@ -1024,6 +1995,7 @@
           if (error) throw error;
 
           toast("Excluído ✅", "success", "item-del");
+          logAction("ITEM_DELETE", "inventory_items", itemId, { name });
         } catch (e) {
           console.error(e);
           items = prev;
@@ -1035,248 +2007,483 @@
         }
       }
 
-      // ========= EXPORT / IMPORT / CLEAR =========
-      function exportVisibleText() {
-        const visible = getVisibleItems();
+      // ========= ITEMS CRUD (restaurado do backup) =========
+async function upsertItem() {
+  if (!currentUser || !currentInventoryId) return;
 
-        if (!visible.length) {
-          toast("Nada pra exportar nesse filtro.", "warn", "export-empty");
-          return;
-        }
+  const name = $("name").value.trim();
+  const unit = $("unit").value;
+  const qty = round(Number($("qty").value || 0));
+  const minQty = round(Number($("min").value || 0));
+  const essential = !!$("essential").checked;
 
-        const lines = visible.map(it => {
-          const ess = it.essential ? " (essencial)" : "";
-          const needs = needsBuy(it) ? " [PRECISA]" : "";
-          return `- ${it.name}: ${it.qty} ${it.unit} (min: ${it.min_qty || 0})${ess}${needs}`;
-        });
+  if (!name) return toast("Informe o nome do item.", "warn", "need-name");
 
-        const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "inventario_filtrado.txt";
-        a.click();
-        URL.revokeObjectURL(url);
-        toast("Exportado ✅", "success", "export-text");
-      }
+  const payload = {
+    inventory_id: currentInventoryId,
+    name,
+    name_norm: norm(name),
+    unit,
+    qty,
+    min_qty: minQty,
+    essential,
+  };
 
-      async function importJson() {
-        const inp = document.createElement("input");
-        inp.type = "file";
-        inp.accept = "application/json";
+  overlaySafe(true, "upsert-item");
+  try {
+    if (editItemId) {
+      const { data, error } = await withTimeout(
+        supabase.from("inventory_items")
+          .update(payload)
+          .eq("id", editItemId)
+          .eq("inventory_id", currentInventoryId)
+          .select("*")
+          .single(),
+        8000,
+        "update item"
+      );
+      if (error) throw error;
 
-        inp.onchange = async () => {
-          const file = inp.files?.[0];
-          if (!file) return;
+      items = items.map(x => x.id === data.id ? data : x);
+      renderItems();
 
-          overlaySafe(true, "import");
-          try {
-            const text = await file.text();
-            const data = JSON.parse(text);
-            if (!Array.isArray(data)) return toast("Arquivo inválido.", "error", "import-invalid");
+      toast("Atualizado ✅", "success", "item-upd");
+      logAction("ITEM_UPDATE", "inventory_items", data.id, { name, unit, qty, min_qty: minQty, essential });
+      resetEdit();
+    } else {
+      payload.created_by = currentUser.id;
 
-            const rows = data.map(x => ({
-              inventory_id: currentInventoryId,
-              name: x.name || "",
-              name_norm: x.name_norm || norm(x.name || ""),
-              unit: x.unit || "un",
-              qty: round(Number(x.qty || 0)),
-              min_qty: round(Number(x.min_qty || 0)),
-              essential: !!x.essential,
-              created_by: currentUser.id,
-            })).filter(r => r.name.trim());
+      const { data, error } = await withTimeout(
+        supabase.from("inventory_items")
+          .insert(payload)
+          .select("*")
+          .single(),
+        8000,
+        "insert item"
+      );
+      if (error) throw error;
 
-            if (!rows.length) return toast("Nada pra importar.", "warn", "import-empty");
+      items = [data, ...items.filter(x => x.id !== data.id)];
+      renderItems();
 
-            const { error } = await withTimeout(
-              supabase.from("inventory_items").insert(rows),
-              9000,
-              "import insert"
-            );
-            if (error) throw error;
+      toast("Adicionado ✅", "success", "item-add");
+      logAction("ITEM_INSERT", "inventory_items", data.id, { name, unit, qty, min_qty: minQty, essential });
 
-            toast("Importado ✅", "success", "import-ok");
-          } catch (e) {
-            console.error(e);
-            toast("Falha ao importar: " + (e?.message || e), "error", "import-fail");
-          } finally {
-            overlaySafe(false, "import");
-          }
-        };
+      if (Number(data.qty || 0) > 0) scheduleBuyUpdate(data.id, Number(data.qty || 0));
+    }
 
-        inp.click();
-      }
+    // limpa campos pós-salvar
+    $("name").value = "";
+    $("qty").value = "";
+    $("min").value = "";
+    $("essential").checked = false;
 
-      async function clearAll() {
-        if (!confirm("Tem certeza que quer zerar tudo?")) return;
+  } catch (e) {
+    console.error(e);
+    toast("Falha ao salvar: " + (e?.message || e), "error", "save-fail");
+  } finally {
+    overlaySafe(false, "upsert-item");
+  }
+}
 
-        overlaySafe(true, "clear");
-        try {
-          const { error } = await withTimeout(
-            supabase.from("inventory_items")
-              .delete()
-              .eq("inventory_id", currentInventoryId),
-            9000,
-            "clear items"
-          );
-          if (error) throw error;
+// ========= EXPORT / IMPORT / FILTER / CLEAR =========
+function exportTextNow() {
+  const lines = items
+    .slice()
+    .sort((a,b) => (a.name||"").localeCompare((b.name||""), "pt-BR"))
+    .map(it => {
+      const ess = it.essential ? " (essencial)" : "";
+      const needs = needsBuy(it) ? " [PRECISA]" : "";
+      return `- ${it.name}: ${it.qty} ${it.unit} (min: ${it.min_qty || 0})${ess}${needs}`;
+    });
 
-          toast("Zerado ✅", "success", "clear-ok");
-        } catch (e) {
-          console.error(e);
-          toast("Falha ao zerar: " + (e?.message || e), "error", "clear-fail");
-        } finally {
-          overlaySafe(false, "clear");
-        }
-      }
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "inventario.txt";
+  a.click();
+  URL.revokeObjectURL(url);
+  toast("Exportado ✅", "success", "export-text");
+  logAction("EXPORT_TEXT", "inventory_items", null, { count: items.length });
+}
+
+async function importJsonNow() {
+  const inp = document.createElement("input");
+  inp.type = "file";
+  inp.accept = "application/json";
+
+  inp.onchange = async () => {
+    const file = inp.files?.[0];
+    if (!file) return;
+
+    overlaySafe(true, "import");
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) return toast("Arquivo inválido.", "error", "import-invalid");
+
+      const rows = data.map(x => ({
+        inventory_id: currentInventoryId,
+        name: x.name || "",
+        name_norm: x.name_norm || norm(x.name || ""),
+        unit: x.unit || "un",
+        qty: round(Number(x.qty || 0)),
+        min_qty: round(Number(x.min_qty || 0)),
+        essential: !!x.essential,
+        created_by: currentUser.id,
+      })).filter(r => r.name.trim());
+
+      if (!rows.length) return toast("Nada pra importar.", "warn", "import-empty");
+
+      const { error } = await withTimeout(
+        supabase.from("inventory_items").insert(rows),
+        9000,
+        "import insert"
+      );
+      if (error) throw error;
+
+      toast("Importado ✅", "success", "import-ok");
+      logAction("IMPORT_JSON", "inventory_items", null, { rows: rows.length });
+      await loadItems(currentInventoryId);
+
+    } catch (e) {
+      console.error(e);
+      toast("Falha ao importar: " + (e?.message || e), "error", "import-fail");
+    } finally {
+      overlaySafe(false, "import");
+    }
+  };
+
+  inp.click();
+}
+
+async function clearAllNow() {
+  if (!isOwner) return toast("Somente o owner pode zerar tudo.", "warn", "clear-owner-only");
+  if (!confirm("Tem certeza que quer zerar tudo?")) return;
+
+  overlaySafe(true, "clear");
+  try {
+    const { error } = await withTimeout(
+      supabase.from("inventory_items")
+        .delete()
+        .eq("inventory_id", currentInventoryId),
+      9000,
+      "clear items"
+    );
+    if (error) throw error;
+
+    toast("Zerado ✅", "success", "clear-ok");
+    logAction("CLEAR_ALL", "inventory_items", null, {});
+  } catch (e) {
+    console.error(e);
+    toast("Falha ao zerar: " + (e?.message || e), "error", "clear-fail");
+  } finally {
+    overlaySafe(false, "clear");
+  }
+}
+
+function toggleNeedsFilter() {
+  showOnlyNeeds = !showOnlyNeeds;
+  $("filterList").textContent = showOnlyNeeds ? "Compras: somente precisa" : "Compras: todos";
+  renderItems();
+}
+
+function cycleEssentialFilter() {
+  essentialFilter = (essentialFilter === "both") ? "essential" : (essentialFilter === "essential" ? "not" : "both");
+  const label = essentialFilter === "both" ? "Essenciais: ambos" : (essentialFilter === "essential" ? "Essenciais: só essenciais" : "Essenciais: sem essenciais");
+  $("filterEssentials").textContent = label;
+  renderItems();
+}
+
+// ========= FINANÇAS: handlers =========
+function addGoal() {
+  ensureFinanceLoaded();
+  const name = $("goalName").value.trim();
+  const target = parseMoneyBRL($("goalTarget").value);
+  if (!name) return toast("Informe o nome da meta.", "warn", "goal-name");
+  if (!target || target <= 0) return toast("Informe um alvo > 0.", "warn", "goal-target");
+
+  const g = { id: uuid(), name, target: Math.round(target * 100) / 100, saved: 0, created_at: new Date().toISOString() };
+  finGoals = [g, ...finGoals];
+  finSave();
+  renderGoals();
+  renderFinanceSummary();
+  toast("Meta criada ✅", "success", "goal-add");
+  logAction("GOAL_CREATE", "fin_goal", g.id, { name, target: g.target });
+
+  $("goalName").value = "";
+  $("goalTarget").value = formatMoneyBRLFromDigits("0");
+}
+
+function addTx() {
+  ensureFinanceLoaded();
+  const type = $("finType").value;
+  const method = $("finMethod").value;
+  const card = (method === "cc") ? $("finCard").value.trim() : "";
+  const desc = $("finDesc").value.trim();
+  const amount = parseMoneyBRL($("finAmount").value);
+
+  if (!desc) return toast("Informe uma descrição.", "warn", "fin-desc");
+  if (!amount || amount <= 0) return toast("Informe um valor > 0.", "warn", "fin-amount");
+  if (method === "cc" && !card) return toast("Informe o nome do cartão.", "warn", "fin-card");
+
+  const t = {
+    id: uuid(),
+    type,
+    method,
+    card: method === "cc" ? card : null,
+    desc,
+    amount: Math.round(amount * 100) / 100,
+    created_at: new Date().toISOString(),
+  };
+
+  finTx = [t, ...finTx];
+  finSave();
+  renderFinanceAll();
+  toast("Lançamento adicionado ✅", "success", "fin-add");
+  logAction("FIN_TX_CREATE", "fin_tx", t.id, { type, method, card, desc, amount: t.amount });
+
+  $("finDesc").value = "";
+  $("finAmount").value = formatMoneyBRLFromDigits("0");
+}
+
+function setCC() {
+  ensureFinanceLoaded();
+  const card = $("ccName").value.trim();
+  const month = $("ccMonth").value;
+  const total = parseMoneyBRL($("ccTotal").value);
+  const paid = parseMoneyBRL($("ccPaid").value);
+
+  if (!card) return toast("Informe o nome do cartão.", "warn", "cc-card");
+  if (!month) return toast("Selecione o mês.", "warn", "cc-month");
+  if (!total || total <= 0) return toast("Informe o total > 0.", "warn", "cc-total");
+  if (paid < 0) return toast("Pago inválido.", "warn", "cc-paid");
+  if (paid > total) return toast("Pago não pode ser maior que o total.", "warn", "cc-paid-gt");
+
+  const existing = finCC.find(x => (x.card || "").toLowerCase() === card.toLowerCase() && x.month === month);
+  const obj = {
+    id: existing?.id || uuid(),
+    card,
+    month,
+    total: Math.round(total * 100) / 100,
+    paid: Math.round(paid * 100) / 100,
+    created_at: existing?.created_at || new Date().toISOString(),
+  };
+
+  finCC = [obj, ...finCC.filter(x => x.id !== obj.id)];
+  finSave();
+  renderFinanceAll();
+  toast(existing ? "Fatura atualizada ✅" : "Fatura salva ✅", "success", "cc-set");
+  logAction("CC_SET", "fin_cc", obj.id, { card, month, total: obj.total, paid: obj.paid });
+
+  $("ccName").value = "";
+  $("ccTotal").value = formatMoneyBRLFromDigits("0");
+  $("ccPaid").value = formatMoneyBRLFromDigits("0");
+}
+
+function finClearAll() {
+  if (!isOwner) return toast("Somente o owner pode zerar finanças.", "warn", "fin-clear-owner");
+  if (!confirm("Zerar finanças (lançamentos, metas e cartões)?")) return;
+
+  finTx = [];
+  finGoals = [];
+  finCC = [];
+  finSave();
+  renderFinanceAll();
+  toast("Finanças zeradas ✅", "success", "fin-clear");
+  logAction("FIN_CLEAR_ALL", "fin", null, {});
+}
+
+// ========= COPIAR CÓDIGO =========
+async function copyInviteCode() {
+  const code = ($("invCodeShow").textContent || "").trim();
+  if (!code || code === "(sem código)") return;
+  try {
+    await navigator.clipboard.writeText(code);
+    toast("Código copiado ✅", "success", "copy-code");
+  } catch {
+    toast("Não consegui copiar automaticamente.", "warn", "copy-fail");
+  }
+}
+
+// ========= AUTH (login/register/logout) =========
+async function doLogin() {
+  const email = $("loginEmail").value.trim();
+  const password = $("loginPass").value;
+  if (!email || !password) return toast("Informe email e senha.", "warn", "login-need");
+
+  overlaySafe(true, "login");
+  try {
+    const { error } = await withTimeout(
+      supabase.auth.signInWithPassword({ email, password }),
+      9000,
+      "login"
+    );
+    if (error) throw error;
+    toast("Logado ✅", "success", "login-ok");
+  } catch (e) {
+    toast("Falha no login: " + (e?.message || e), "error", "login-fail");
+  } finally {
+    overlaySafe(false, "login");
+  }
+}
+
+async function doRegister() {
+  const name = $("regName").value.trim();
+  const email = $("regEmail").value.trim();
+  const password = $("regPass").value;
+
+  const gen = $("genInv").checked;
+  const code = $("invCode").value.trim().toUpperCase();
+
+  if (!name) return toast("Informe seu nome.", "warn", "reg-name");
+  if (!email) return toast("Informe o email.", "warn", "reg-email");
+  if (!password || password.length < 6) return toast("Senha precisa ter pelo menos 6 caracteres.", "warn", "reg-pass");
+
+  if (!gen) {
+    if (!code || code.length !== 6) return toast("Informe um código de inventário com 6 caracteres.", "warn", "reg-code");
+  }
+
+  setPending({ mode: gen ? "create" : "join", displayName: name, code });
+
+  overlaySafe(true, "register");
+  try {
+    const { error } = await withTimeout(
+      supabase.auth.signUp({ email, password }),
+      12000,
+      "register"
+    );
+    if (error) throw error;
+
+    toast("Conta criada ✅", "success", "reg-ok");
+  } catch (e) {
+    clearPending();
+    toast("Falha ao registrar: " + (e?.message || e), "error", "reg-fail");
+  } finally {
+    overlaySafe(false, "register");
+  }
+}
+
+async function doLogout() {
+  overlaySafe(true, "logout");
+  try { await supabase.auth.signOut(); } finally { overlaySafe(false, "logout"); }
+}
 
       // ========= UI EVENTS =========
       $("openRegisterBtn").onclick = () => showRegister();
       $("backToLoginBtn").onclick = () => showLogin();
       $("genInv").addEventListener("change", syncRegisterUI);
 
-      $("loginBtn").onclick = async () => {
-        const email = $("loginEmail").value.trim();
-        const password = $("loginPass").value;
+      $("ownerLogBtn").onclick = () => openLogModal();
+      $("logClose").onclick = () => closeLogModal();
+      $("logRefresh").onclick = () => loadLogs();
+      $("logModal").addEventListener("click", (e) => {
+        if (e.target === $("logModal")) closeLogModal();
+      });
 
-        if (!email || !password) return toast("Informe email e senha.", "warn", "need-login");
+      // pay modal events
+      $("payCancel").onclick = closePayModal;
+      $("payX").onclick = closePayModal;
+      $("payConfirm").onclick = confirmPayModal;
+      $("payModal").addEventListener("click", (e) => {
+        if (e.target === $("payModal")) closePayModal();
+      });
+      $("payValue").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") confirmPayModal();
+        if (e.key === "Escape") closePayModal();
+      });
 
-        overlaySafe(true, "login");
+      // ✅ toggle finanças liberado (sem checar owner)
+      $("toggleModeBtn").onclick = () => {
+        const finVisible = !$("financeView").classList.contains("hidden");
+        setMode(finVisible ? "inventory" : "finance");
+      };
+
+      $("finTabBtn").onclick = () => {
+        setFinTab(finTab === "summary" ? "tx" : "summary");
+      };
+
+      $("finMethod").addEventListener("change", syncFinMethodUI);
+// --- Inventário ---
+$("search").addEventListener("input", renderItems);
+$("add").onclick = upsertItem;
+$("cancelEdit").onclick = resetEdit;
+$("exportText").onclick = exportTextNow;
+$("import").onclick = importJsonNow;
+$("clear").onclick = clearAllNow;
+$("filterList").onclick = toggleNeedsFilter;
+$("filterEssentials").onclick = cycleEssentialFilter;
+$("invCodeShow").onclick = copyInviteCode;
+
+// --- Auth ---
+$("loginBtn").onclick = doLogin;
+$("registerBtn").onclick = doRegister;
+$("logoutBtn").onclick = doLogout;
+
+$("loginPass").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+$("regPass").addEventListener("keydown", (e) => { if (e.key === "Enter") doRegister(); });
+
+// --- Finanças ---
+$("goalAdd").onclick = addGoal;
+$("finAdd").onclick = addTx;
+$("ccSet").onclick = setCC;
+$("finExport").onclick = finExportText;
+$("finExport2").onclick = finExportText;
+$("finClear").onclick = finClearAll;
+
+      // ✅ FIX: botão Adicionar (Contas/Dívidas) estava sem handler
+      $("billAdd").onclick = async () => {
+        if (!currentUser || !currentInventoryId) return toast("Faça login primeiro.", "warn", "bill-login");
+
+        const description = $("billDesc").value.trim();
+        const amount = parseMoneyBRL($("billAmount").value);
+        const month = $("billMonth").value;
+
+        if (!description) return toast("Informe a descrição da conta.", "warn", "bill-desc");
+        if (!amount || amount <= 0) return toast("Informe um valor > 0.", "warn", "bill-amount");
+        if (!month) return toast("Selecione o mês.", "warn", "bill-month");
+
+        overlaySafe(true, "bill-add");
         try {
+          const payload = {
+            inventory_id: currentInventoryId,
+            description,
+            amount: Math.round(amount * 100) / 100,
+            month,
+            paid_at: null,
+            paid_amount: 0,
+            receipt_url: null,
+            receipt_path: null,
+            payer_user_id: null,
+            payer_name: null,
+          };
+
           const { data, error } = await withTimeout(
-            supabase.auth.signInWithPassword({ email, password }),
+            supabase.from("finance_bills")
+              .insert(payload)
+              .select("*")
+              .single(),
             9000,
-            "login"
+            "insert bill"
           );
           if (error) throw error;
 
-          currentUser = data?.user || (await getSession())?.user || null;
-          toast("Logado ✅", "success", "logged");
-          await bootFromProfile();
-          pingLastSeen();
+          bills = [data, ...bills];
+          renderBills();
+          toast("Conta adicionada ✅", "success", "bill-add-ok");
+          logAction("BILL_CREATE", "finance_bills", data.id, { description, amount: payload.amount, month });
 
+          $("billDesc").value = "";
+          $("billAmount").value = formatMoneyBRLFromDigits("0");
+          $("billMonth").value = monthKey(new Date());
         } catch (e) {
           console.error(e);
-          toast("Falha no login: " + (e?.message || e), "error", "login-fail");
+          toast("Falha ao adicionar conta: " + (e?.message || e), "error", "bill-add-fail");
         } finally {
-          overlaySafe(false, "login");
+          overlaySafe(false, "bill-add");
         }
       };
-
-      $("registerBtn").onclick = async () => {
-        const displayName = $("regName").value.trim();
-        const email = $("regEmail").value.trim();
-        const password = $("regPass").value;
-        const gen = $("genInv").checked;
-        const code = ($("invCode").value || "").trim().toUpperCase();
-
-        if (!displayName) return toast("Informe seu nome.", "warn", "reg-name");
-        if (!email) return toast("Informe seu email.", "warn", "reg-email");
-        if (!password || password.length < 6) return toast("Senha com pelo menos 6 caracteres.", "warn", "reg-pass");
-        if (!gen && !code) return toast("Informe o código do inventário.", "warn", "reg-code");
-
-        setPending({
-          displayName,
-          mode: gen ? "create" : "join",
-          code: gen ? "" : code,
-          createdAt: Date.now(),
-        });
-
-        overlaySafe(true, "register");
-        try {
-          const { data, error } = await withTimeout(
-            supabase.auth.signUp({
-              email,
-              password,
-              options: { emailRedirectTo: APP_URL },
-            }),
-            9000,
-            "signUp"
-          );
-          if (error) {
-            clearPending();
-            throw error;
-          }
-
-          if (!data?.session?.user) {
-            toast("Conta criada ✅ Confirme o email e depois faça login.", "warn", "confirm-email");
-            showLogin();
-            return;
-          }
-
-          currentUser = data.session.user;
-          toast("Conta criada ✅", "success", "signup-ok");
-
-          await finalizePendingIfAny();
-          pingLastSeen();
-
-        } catch (e) {
-          console.error(e);
-          clearPending();
-          toast("Falha no cadastro: " + (e?.message || e), "error", "signup-fail");
-        } finally {
-          overlaySafe(false, "register");
-        }
-      };
-
-      $("logoutBtn").onclick = async () => {
-        overlaySafe(true, "logout");
-        try {
-          await stopRealtime();
-          await supabase.auth.signOut();
-          currentUser = null;
-          currentInventoryId = null;
-          items = [];
-          members = [];
-          resetEdit();
-          showLogin();
-          toast("Saiu.", "warn", "logout");
-        } finally {
-          overlaySafe(false, "logout");
-        }
-      };
-
-      $("invCodeShow").onclick = async () => {
-        const t = $("invCodeShow").textContent || "";
-        if (!t || t === "(sem código)") return;
-        try {
-          await navigator.clipboard.writeText(t);
-          toast("Código copiado ✅", "success", "copy-code");
-        } catch {
-          toast("Não consegui copiar.", "error", "copy-fail");
-        }
-      };
-
-      $("add").onclick = () => upsertItem();
-      $("cancelEdit").onclick = () => resetEdit();
-      $("search").addEventListener("input", renderItems);
-      $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") upsertItem(); });
-
-      // ✅ Filtrar (cicla)
-      $("filterBtn").onclick = () => {
-        if (filterMode === "none") filterMode = "essential";
-        else if (filterMode === "essential") filterMode = "notEssential";
-        else if (filterMode === "notEssential") filterMode = "needs";
-        else filterMode = "none";
-
-        syncActionButtons();
-        renderItems();
-      };
-
-      // ✅ Organizar (cicla)
-      $("sortBtn").onclick = () => {
-        if (sortMode === "az") sortMode = "za";
-        else if (sortMode === "za") sortMode = "qtyAsc";
-        else if (sortMode === "qtyAsc") sortMode = "qtyDesc";
-        else sortMode = "az";
-
-        syncActionButtons();
-        renderItems();
-      };
-
-      $("exportBtn").onclick = exportVisibleText;
-      $("import").onclick = importJson;
-      $("clear").onclick = clearAll;
 
       // ========= AUTH STATE =========
       let booting = false;
@@ -1290,6 +2497,8 @@
           currentInventoryId = null;
           items = [];
           members = [];
+          isOwner = false;
+          bills = [];
           resetEdit();
           showLogin();
           return;
@@ -1312,18 +2521,13 @@
       (async () => {
         try {
           const session = await getSession();
-          if (!session?.user) {
-            syncActionButtons();
-            return showLogin();
-          }
+          if (!session?.user) return showLogin();
 
           currentUser = session.user;
-          syncActionButtons();
           await bootFromProfile();
           pingLastSeen();
         } catch (e) {
           console.error(e);
-          syncActionButtons();
           showLogin();
         }
       })();
@@ -1331,9 +2535,6 @@
       // Offline/Online
       window.addEventListener("offline", () => toast("Sem internet. Pode atrasar o tempo real.", "warn", "offline"));
       window.addEventListener("online", () => toast("Conexão voltou ✅", "success", "online"));
-
-      // init buttons
-      syncActionButtons();
     });
   </script>
 </body>
