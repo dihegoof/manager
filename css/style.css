@@ -652,3 +652,34 @@ button.ghost{
 
 /* checkline (caso não exista no seu CSS atual) */
 .checkline { display: inline-flex; align-items: center; gap: 8px; }
+
+
+/* ✅ input simples (igual prompt) */
+.plain-input{
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255,255,255,.98);
+  border-color: rgba(11,18,32,.20);
+  box-shadow: none;
+}
+.plain-input:focus{
+  border-color: rgba(11,58,82,.45);
+  box-shadow: 0 10px 22px rgba(11,58,82,.10);
+}
+
+/* modal valor: garante 100% no mobile */
+#amountValue, #amountValuePlain{ width:100%; 
+}
+
+@media (max-width: 540px) {
+
+  /* Seleciona apenas o controls dentro da lista de metas */
+  #goalList .controls {
+    grid-template-columns: 1fr 1fr !important; /* duas colunas */
+  }
+
+  /* remove o comportamento que joga o último botão pra baixo */
+  #goalList .controls button:last-child {
+    grid-column: auto !important;
+  }
+}
