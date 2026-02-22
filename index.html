@@ -221,8 +221,9 @@
 
         <!-- ACTIONS -->
         <div class="row actions">
-          <button class="small" id="filterList">Filtrar lista</button>
+          <button class="small" id="filterList">Ordenar: A→Z</button>
           <button class="small" id="filterEssentials">Essenciais: ambos</button>
+          <button class="small" id="filterNeeds">Compra: ambos</button>
           <button class="small" id="exportText">Exportar (texto)</button>
           <button class="small" id="import">Importar</button>
           <button class="small" id="clear">Zerar tudo</button>
@@ -245,6 +246,7 @@
             <div class="row" style="gap:8px; justify-content:flex-end;">
               <button class="small" id="finTabBtn" type="button">Seção: Resumo</button>
               <button class="small" id="finExport2" type="button">Exportar</button>
+              <button class="small" id="finClear" type="button">Zerar tudo</button>
             </div>
           </div>
         </div>
@@ -281,7 +283,7 @@
               <option value="cc">Cartão de crédito</option>
             </select>
 
-            <input id="finCard" placeholder="Cartão (ex: Nubank)" class="w120" style="display:none;" />
+            <select id="finCardSel" class="w120" style="display:none;" title="Cartão"></select>
 
             <input id="finDesc" placeholder="Descrição (ex: mercado, aluguel...)" />
             <input id="finAmount" class="money-input w120" inputmode="numeric" placeholder="R$ 0,00" />
@@ -321,53 +323,43 @@
         </div>
 
         <div id="finTabTx" class="hidden">
-          <!-- ✅ pagamento mínimo cartão -->
-          <div style="font-weight:900;">Cartões: pagamento mínimo</div>
+          <!-- ✅ FATURAS / CARTÕES -->
+          <div style="font-weight:900;">Faturas</div>
           <div class="muted" style="margin-top:6px;">
-            Se você pagar só o mínimo, o resto “rola” pro próximo mês.
+            Cadastre seus cartões aqui. Nos lançamentos, você só consegue usar cartão se existir algum cadastrado.
           </div>
 
-          <!-- ✅ SIMÉTRICO -->
-          <div class="row mt12 grid5">
-            <input id="ccName" class="w100" placeholder="Cartão (ex: Nubank)" />
-            <select id="ccMonth" class="w100" title="Mês (AAAA-MM)"></select>
-            <input id="ccTotal" class="money-input w100" inputmode="numeric" placeholder="Total (R$)" />
-            <input id="ccPaid" class="money-input w100" inputmode="numeric" placeholder="Pago (R$)" />
-            <button id="ccSet" class="w100">Salvar</button>
+          <!-- ✅ cadastrar cartão -->
+          <div class="row mt12 grid4">
+            <input id="cardName" class="w100" placeholder="Cartão (ex: Nubank)" />
+            <input id="cardCloseDay" class="w100" type="number" min="1" max="31" step="1" placeholder="Fecha (dia)" />
+            <input id="cardDueDay" class="w100" type="number" min="1" max="31" step="1" placeholder="Vence (dia)" />
+            <button id="cardAdd" class="w100">Adicionar</button>
           </div>
 
-          <div class="list" id="ccList"></div>
+          <div class="list" id="cardList"></div>
 
           <div class="divider"></div>
 
-
           <div style="font-weight:900;">Contas / Dívidas (com comprovante)</div>
-          <!-- <div class="muted" style="margin-top:6px;">
-            Registre contas fixas (água, luz, financiamento, etc). Quem pagou + valor pago + comprovante.
-          </div> -->
 
           <div class="row mt12 grid5">
             <input id="billDesc" class="w100" placeholder="Conta / Dívida (ex: Água / Empréstimo)" />
-            <input id="billAmount" class="money-input w100" inputmode="numeric" placeholder="R$ 0,00" />
+            <input id="billAmount" class="money-input w100" inputmode="numeric" placeholder="Valor total (R$)" />
             <select id="billMonth" class="w100" title="Mês (AAAA-MM)"></select>
-            <select id="billPayMode" class="w100" title="Pagamento">
-              <option value="once">À vista</option>
-              <option value="installments">Parcelado</option>
-            </select>
+
+            <!-- ✅ Parcelas (1x..24x) -->
+            <select id="billInstallPlan" class="w100" title="Parcelas"></select>
+
             <button id="billAdd" class="w100">Adicionar</button>
           </div>
 
-          <div id="billInstallRow" class="row mt10 hidden grid3">
-            <input id="billInstallTotal" class="w100" type="number" min="2" step="1"
-              placeholder="Total de parcelas (ex: 10)" />
-            <input id="billInstallPaid" class="w100" type="number" min="0" step="1"
-              placeholder="Parcelas já pagas (ex: 3)" />
-            <div class="muted" style="align-self:center;">* Se deixar em branco, assume 0 pagas.</div>
+          <!-- ✅ 'Outro' para valor de parcela manual -->
+          <div id="billCustomInstallRow" class="row mt10 hidden grid3">
+            <input id="billInstallCustomValue" class="money-input w100" inputmode="numeric" placeholder="Valor da parcela (R$)" />
+            <input id="billInstallCustomTotal" class="w100" type="number" min="2" max="24" step="1" placeholder="Qtd parcelas (2..24)" />
+            <div class="muted" style="align-self:center;">* Se escolher “Outro”, informe valor e quantidade.</div>
           </div>
-
-          <!-- <div class="muted" style="margin-top:6px;">
-          * Upload usa Supabase Storage (bucket <b>receipts</b>). Depois te passo as policies.
-        </div> -->
 
           <div class="row actions mt10" id="billFilters">
             <button class="small" id="billFilterBtn" type="button">Ver: Ativas</button>
@@ -378,14 +370,7 @@
           <div class="divider"></div>
 
           <!-- ✅ DÍVIDAS PARCELADAS (Supabase) -->
-
-
-
-          <div class="row actions">
-            <button class="small" id="finExport">Exportar (texto)</button>
-            <button class="small" id="finClear">Zerar finanças</button>
-          </div>
-        </div>
+</div>
       </div>
     </div>
   </div><!-- Footer -->
@@ -537,8 +522,7 @@
       }
 
       fillMonthSelect("billMonth");
-      fillMonthSelect("ccMonth");
-
+      
       // Footer
       $("footer").innerHTML = `© ${new Date().getFullYear()}
         <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
@@ -649,8 +633,9 @@
       let realtimeItems = null;
       let realtimeMembers = null;
 
-      let showOnlyNeeds = false;
+      let needsFilter = "both"; // both | needs | noneeds
       let essentialFilter = "both"; // both | essential | not
+      let sortMode = "name_asc"; // name_asc | name_desc | qty_asc | qty_desc
       let editItemId = null;
 
       // owner flag
@@ -883,6 +868,8 @@
           fin.classList.add("hidden");
           inv.classList.remove("hidden");
           btn.textContent = "Finanças";
+          // para de escutar as tabelas de finanças quando não está exibindo
+          stopRealtimeFinance();
         }
       }
 
@@ -891,11 +878,14 @@
       let finTx = [];
       let finGoals = [];
       let finCC = [];
+      let finCards = [];
 
       // local fallback keys
       function finKeyTx() { return `fin_tx_${currentInventoryId || "none"}`; }
       function finKeyGoals() { return `fin_goals_${currentInventoryId || "none"}`; }
       function finKeyCC() { return `fin_cc_${currentInventoryId || "none"}`; }
+function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
+
 
       function finOldKeyTx() { return `fin_beta_tx_${currentInventoryId || "none"}`; }
       function finOldKeyGoals() { return `fin_beta_goals_${currentInventoryId || "none"}`; }
@@ -905,6 +895,7 @@
         try { localStorage.setItem(finKeyTx(), JSON.stringify(finTx)); } catch (e) { }
         try { localStorage.setItem(finKeyGoals(), JSON.stringify(finGoals)); } catch (e) { }
         try { localStorage.setItem(finKeyCC(), JSON.stringify(finCC)); } catch (e) { }
+        try { localStorage.setItem(finKeyCards(), JSON.stringify(finCards)); } catch (e) { }
       }
 
       function safeParseLS(key) {
@@ -926,10 +917,29 @@
         if (!Array.isArray(goals)) goals = safeParseLS(finOldKeyGoals());
         finGoals = Array.isArray(goals) ? goals : [];
 
-        // CC
+        // CC (pagamentos de fatura por mês)
         let cc = safeParseLS(finKeyCC());
         if (!Array.isArray(cc)) cc = safeParseLS(finOldKeyCC());
         finCC = Array.isArray(cc) ? cc : [];
+
+        // CARDS (cadastro de cartões)
+        let cards = safeParseLS(finKeyCards());
+        finCards = Array.isArray(cards) ? cards : [];
+
+        // migração simples: se não tem card cadastrado, tenta criar a partir dos lançamentos antigos
+        if (!finCards.length) {
+          const uniq = new Set();
+          for (const t of finTx) {
+            if (t?.method === "cc" && t?.card) uniq.add(String(t.card));
+          }
+          finCards = Array.from(uniq).slice(0, 30).map((name) => ({
+            id: uuid(),
+            name,
+            close_day: 1,
+            due_day: 10,
+            created_at: new Date().toISOString(),
+          }));
+        }
 
         finSave(); // migra
       }
@@ -938,7 +948,9 @@
         if (financeLoaded) return;
         financeLoaded = true;
         finLoad();
+        renderCardSelect();
         syncFinMethodUI();
+        buildBillInstallPlan();
       }
 
       function uuid() {
@@ -959,12 +971,13 @@
           }
         }
 
+        // carry = resto das faturas do mês atual
+        const mKey = monthKey(new Date());
         let carry = 0;
-        for (const c of finCC) {
-          const total = Number(c.total || 0);
-          const paid = Number(c.paid || 0);
-          const rest = Math.max(0, total - paid);
-          carry += rest;
+        for (const c of finCards) {
+          const total = calcCardMonthTotal(c.name, mKey);
+          const paid = getCardPaid(c.name, mKey);
+          carry += Math.max(0, total - paid);
         }
 
         const available = income - expense;
@@ -1209,82 +1222,200 @@
         }
       }
 
-      function renderCC() {
-        const host = $("ccList");
+      function getCardPaid(cardName, month) {
+        const r = finCC.find(x => x.card === cardName && x.month === month);
+        return Number(r?.paid || 0);
+      }
+
+      function upsertCardPaid(cardName, month, paid) {
+        const existing = finCC.find(x => x.card === cardName && x.month === month);
+        const id = existing?.id || uuid();
+        const rec = { id, inventory_id: currentInventoryId, card: cardName, month, total: 0, paid: Math.round(Number(paid || 0) * 100) / 100 };
+        finCC = [rec, ...finCC.filter(x => x.id !== id)];
+        if (!financeCloudOk) finSave();
+      }
+
+      function calcCardMonthTotal(cardName, month) {
+        // soma lançamentos cc do mês (YYYY-MM)
+        let sum = 0;
+        for (const t of finTx) {
+          if (t?.method !== "cc") continue;
+          if (String(t.card || "") !== String(cardName || "")) continue;
+          const mk = (t.created_at || "").slice(0, 7);
+          if (mk !== month) continue;
+          sum += Number(t.amount || 0);
+        }
+        return Math.round(sum * 100) / 100;
+      }
+
+      function renderCardSelect() {
+        const sel = $("finCardSel");
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = "";
+        for (const c of finCards.slice().sort((a, b) => String(a.name).localeCompare(String(b.name), "pt-BR"))) {
+          const opt = document.createElement("option");
+          opt.value = c.name;
+          opt.textContent = c.name;
+          sel.appendChild(opt);
+        }
+        // mantém seleção se possível
+        if (cur && finCards.some(x => x.name === cur)) sel.value = cur;
+      }
+
+      async function renderCards() {
+        const host = $("cardList");
+        if (!host) return;
         host.innerHTML = "";
 
-        const sorted = finCC.slice().sort((a, b) => (b.month || "").localeCompare((a.month || "")) || (a.card || "").localeCompare((b.card || ""), "pt-BR"));
-
-        if (!sorted.length) {
+        if (!finCards.length) {
           const empty = document.createElement("div");
           empty.className = "sub";
-          empty.textContent = "Sem faturas registradas 🙂";
+          empty.textContent = "Sem cartões cadastrados 🙂";
           host.appendChild(empty);
           return;
         }
 
-        for (const c of sorted) {
-          const total = Number(c.total || 0);
-          const paid = Number(c.paid || 0);
+        const mKey = monthKey(new Date());
+
+        for (const c of finCards.slice().sort((a, b) => String(a.name).localeCompare(String(b.name), "pt-BR"))) {
+          const total = calcCardMonthTotal(c.name, mKey);
+          const paid = getCardPaid(c.name, mKey);
           const rest = Math.max(0, total - paid);
 
           const row = document.createElement("div");
           row.className = "item";
 
-          row.innerHTML = `
-            <div>
-              <div class="name">${c.card} • ${c.month}</div>
-              <div class="sub">
-                <span class="pill">Total: ${money(total)}</span>
-                <span class="pill good">Pago: ${money(paid)}</span>
-                <span class="pill neutral">Resto: ${money(rest)}</span>
-              </div>
+          const left = document.createElement("div");
+          left.innerHTML = `
+            <div class="name">${escapeHtml(c.name)} • ${mKey}</div>
+            <div class="sub">
+              <span class="pill">fecha: dia ${Number(c.close_day || 1)}</span>
+              <span class="pill">vence: dia ${Number(c.due_day || 10)}</span>
+              <span class="pill">fatura: ${money(total)}</span>
+              <span class="pill good">pago: ${money(paid)}</span>
+              <span class="pill ${rest > 0 ? "danger" : "neutral"}">resto: ${money(rest)}</span>
             </div>
           `;
 
           const controls = document.createElement("div");
           controls.className = "controls";
 
-          const del = document.createElement("button");
-          del.textContent = "🗑️";
-          del.title = "Remover fatura";
-          del.onclick = async () => {
-            if (!confirm("Remover este registro?")) return;
-            finCC = finCC.filter(x => x.id !== c.id);
-            if (!financeCloudOk) finSave();
-            renderFinanceAll();
-            toast("Removido ✅", "success", "cc-del");
-            logAction("CC_DELETE", "fin_cc", c.id, { card: c.card, month: c.month });
-
-            if (financeCloudOk) {
-              try {
-                const { error } = await withTimeout(
-                  supabase.from("finance_cc")
-                    .delete()
-                    .eq("id", c.id)
-                    .eq("inventory_id", currentInventoryId),
-                  9000,
-                  "delete cc"
-                );
-                if (error) throw error;
-              } catch (e) {
-                console.error(e);
-                toast("Falha ao remover fatura no cloud: " + (e?.message || e), "error", "cc-del-cloud-fail");
-              }
-            }
+          const payBtn = document.createElement("button");
+          payBtn.textContent = "💳";
+          payBtn.title = "Registrar pagamento da fatura";
+          payBtn.onclick = () => {
+            openPayFaturaModal(c, mKey, paid, total);
           };
 
-          controls.appendChild(del);
-          row.appendChild(controls);
+          const del = document.createElement("button");
+          del.textContent = "🗑️";
+          del.title = "Remover cartão";
+          del.disabled = !isOwner;
+          del.onclick = async () => {
+            if (!isOwner) return toast("Somente o owner pode remover cartões.", "warn", "card-del-owner");
+            if (!confirm(`Remover o cartão "${c.name}"?`)) return;
+            finCards = finCards.filter(x => x.id !== c.id);
+            if (!financeCloudOk) finSave();
+            renderCardSelect();
+            renderCards();
+            renderFinanceSummary();
+            renderMiniPanel();
+          };
+
+          controls.append(payBtn, del);
+          row.append(left, controls);
           host.appendChild(row);
         }
       }
 
-      function renderFinanceAll() {
+      function openPayFaturaModal(card, month, paidNow, totalNow) {
+        const meta = `${card.name} • ${month} • fatura: ${money(totalNow)} • pago: ${money(paidNow)}`;
+        openAmountModal({
+          title: "Registrar pagamento da fatura",
+          meta,
+          start: paidNow,
+          onConfirm: async (val) => {
+            const paid = Math.min(Number(totalNow || 0), Math.max(0, Number(val || 0)));
+            upsertCardPaid(card.name, month, paid);
+
+            // cloud: tenta salvar (se table finance_cc existir)
+            if (financeCloudOk) {
+              try {
+                const existing = finCC.find(x => x.card === card.name && x.month === month);
+                const payload = { ...existing, total: 0, paid };
+                await withTimeout(supabase.from("finance_cc").upsert(payload), 9000, "upsert fatura");
+              } catch (e) {
+                console.error(e);
+                toast("Falha ao salvar pagamento da fatura no cloud: " + (e?.message || e), "error", "fatura-cloud-fail");
+              }
+            }
+
+            renderCards();
+            renderFinanceAll();
+          }
+        });
+      }
+
+        
+
+
+      function prevMonthKey() {
+        const d = new Date();
+        return monthKey(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+      }
+
+      async function handleCardRolloverIfNeeded() {
+        // se virou o mês e ficou resto na fatura anterior, cria uma dívida à vista automaticamente
+        if (!currentInventoryId || !currentUser) return;
+        if (!finCards.length) return;
+
+        const prev = prevMonthKey();
+        for (const c of finCards) {
+          const totalPrev = calcCardMonthTotal(c.name, prev);
+          const paidPrev = getCardPaid(c.name, prev);
+          const rest = Math.max(0, totalPrev - paidPrev);
+          if (rest <= 0) continue;
+
+          const key = `fin_roll_${currentInventoryId}_${prev}_${c.name}`;
+          if (localStorage.getItem(key) === "1") continue;
+
+          try {
+            const payload = {
+              inventory_id: currentInventoryId,
+              description: `Fatura ${c.name} (${prev})`,
+              amount: Math.round(rest * 100) / 100,
+              month: prev,
+              pay_mode: "once",
+              installments_total: 1,
+              installments_paid: 0,
+              paid_at: null,
+              paid_amount: 0,
+              receipt_url: null,
+              receipt_path: null,
+              payer_user_id: null,
+              payer_name: null,
+            };
+            const { error } = await withTimeout(
+              supabase.from("finance_bills").insert(payload),
+              9000,
+              "rollover bill"
+            );
+            if (error) throw error;
+
+            localStorage.setItem(key, "1");
+            toast(`Virou dívida: fatura ${c.name} (${prev})`, "warn", "rollover-created");
+          } catch (e) {
+            console.warn("rollover fail:", e?.message || e);
+          }
+        }
+      }
+
+function renderFinanceAll() {
         renderFinanceSummary();
         renderGoals();
         renderFinanceTx();
-        renderCC();
+        renderCards();
         renderMiniPanel();
       }
 
@@ -1336,16 +1467,25 @@
 
       function syncFinMethodUI() {
         const method = $("finMethod").value;
-        const card = $("finCard");
-        if (method === "cc") {
-          card.style.display = "";
-          card.placeholder = "Cartão (ex: Nubank)";
-        } else {
-          card.style.display = "none";
-          card.value = "";
-        }
-      }
+        const sel = $("finCardSel");
+        if (!sel) return;
 
+        if (method === "cc") {
+          // bloqueia se não tem cartão cadastrado
+          if (!finCards.length) {
+            toast("Cadastre um cartão em Faturas primeiro.", "warn", "cc-no-cards");
+            $("finMethod").value = "cash";
+            sel.style.display = "none";
+            sel.innerHTML = "";
+            return;
+          }
+          sel.style.display = "";
+          renderCardSelect();
+        } else {
+          sel.style.display = "none";
+        }
+
+      }
       // ========= "ABA" / SEÇÃO FINANÇAS =========
       let finTab = "summary"; // summary | tx
       function setFinTab(t) {
@@ -1430,7 +1570,7 @@
               if (ev === "INSERT") finTx = [payload.new, ...finTx.filter(x => x.id !== payload.new.id)];
               if (ev === "UPDATE") finTx = finTx.map(x => x.id === payload.new.id ? payload.new : x);
               if (ev === "DELETE") finTx = finTx.filter(x => x.id !== payload.old.id);
-              renderFinanceAll();
+              if (!$("financeView")?.classList.contains("hidden")) renderFinanceAll();
             })
           .subscribe();
 
@@ -1442,7 +1582,7 @@
               if (ev === "INSERT") finGoals = [payload.new, ...finGoals.filter(x => x.id !== payload.new.id)];
               if (ev === "UPDATE") finGoals = finGoals.map(x => x.id === payload.new.id ? payload.new : x);
               if (ev === "DELETE") finGoals = finGoals.filter(x => x.id !== payload.old.id);
-              renderFinanceAll();
+              if (!$("financeView")?.classList.contains("hidden")) renderFinanceAll();
             })
           .subscribe();
 
@@ -1454,7 +1594,7 @@
               if (ev === "INSERT") finCC = [payload.new, ...finCC.filter(x => x.id !== payload.new.id)];
               if (ev === "UPDATE") finCC = finCC.map(x => x.id === payload.new.id ? payload.new : x);
               if (ev === "DELETE") finCC = finCC.filter(x => x.id !== payload.old.id);
-              renderFinanceAll();
+              if (!$("financeView")?.classList.contains("hidden")) renderFinanceAll();
             })
           .subscribe();
       }
@@ -1698,8 +1838,8 @@
           const isParcel = (b.pay_mode === "installments" && totalInst > 1);
           const statusLabel = paid ? (isParcel ? "quitado" : "pago") : "pendente";
 
-          const receiptLink = b.receipt_url
-            ? `<a class="filelink" href="${b.receipt_url}" target="_blank" rel="noopener">ver comprovante</a>`
+          const receiptLink = (b.receipt_path || b.receipt_url)
+            ? `<button class="filelink" type="button" data-bill="${b.id}">ver comprovante</button>`
             : `<span class="muted">sem comprovante</span>`;
 
           const left = document.createElement("div");
@@ -1730,18 +1870,39 @@
 
             // Parcelado: quando marcar como pago, soma 1 parcela (e abre modal pra valor pago)
             if (wantPaid && isParcel) {
+              const total = Number(b.amount || 0);
+              const parcela = totalInst > 0 ? Math.round((total / totalInst) * 100) / 100 : 0;
+
               openAmountModal({
-                title: "Pagar parcela",
-                plain: true,
-                meta: `${b.description || "Conta"} • ${b.month} • ${paidInst}/${totalInst} pagas`,
-                start: 0,
+                title: "Pagar parcela(s)",
+                // ✅ agora com máscara R$
+                meta: `${b.description || "Conta"} • ${b.month} • ${paidInst}/${totalInst} pagas • parcela: ${money(parcela)}`,
+                start: parcela > 0 ? parcela : 0,
                 onConfirm: async (val) => {
-                  const nextPaid = Math.min(totalInst, paidInst + 1);
+                  const pay = Math.round(Number(val || 0) * 100) / 100;
+                  if (!parcela || parcela <= 0) return toast("Parcela inválida (valor total / parcelas).", "warn", "bill-parcela-invalid");
+                  if (!pay || pay <= 0) return toast("Informe um valor > 0.", "warn", "bill-pay-val");
+
+                  // ✅ permite pagar mais de 1 parcela SOMENTE se for múltiplo exato do valor da parcela
+                  const ratio = pay / parcela;
+                  const k = Math.round(ratio);
+                  const diff = Math.abs(pay - (k * parcela));
+
+                  if (k < 1 || diff > 0.009) {
+                    return toast(`Você só pode pagar múltiplos exatos da parcela (${money(parcela)}). Ex: ${money(parcela)}, ${money(parcela * 2)}, ${money(parcela * 3)}…`, "warn", "bill-pay-multiple");
+                  }
+
+                  const remaining = Math.max(0, totalInst - paidInst);
+                  if (k > remaining) {
+                    return toast(`Valor excede as parcelas restantes (${remaining}).`, "warn", "bill-pay-over");
+                  }
+
+                  const nextPaid = Math.min(totalInst, paidInst + k);
                   const willBeDone = (nextPaid >= totalInst);
 
                   const patch = {
                     installments_paid: nextPaid,
-                    paid_amount: Math.round((Number(b.paid_amount || 0) + Number(val || 0)) * 100) / 100,
+                    paid_amount: Math.round((Number(b.paid_amount || 0) + pay) * 100) / 100,
                     // ✅ sempre guarda quem foi o último a pagar
                     payer_user_id: currentUser.id,
                     payer_name: (members.find(m => m.user_id === currentUser.id)?.display_name) || "Usuário",
@@ -1766,8 +1927,8 @@
 
                     bills = bills.map(x => x.id === data.id ? data : x);
                     renderBills();
-                    toast(willBeDone ? "Dívida quitada ✅" : "Parcela registrada ✅", "success", "bill-inst-ok");
-                    logAction("BILL_PAY_INSTALLMENT", "finance_bills", b.id, { add_paid: val, installments_paid: nextPaid, installments_total: totalInst });
+                    toast(willBeDone ? "Dívida quitada ✅" : `Pagamento registrado (${k} parcela${k > 1 ? "s" : ""}) ✅`, "success", "bill-inst-ok");
+                    logAction("BILL_PAY_INSTALLMENT", "finance_bills", b.id, { add_paid: pay, installments_add: k, installments_paid: nextPaid, installments_total: totalInst });
                   } catch (e) {
                     console.error(e);
                     toast("Falha ao registrar parcela: " + (e?.message || e), "error", "bill-inst-fail");
@@ -1791,10 +1952,10 @@
 
           const attachBtn = document.createElement("button");
           attachBtn.textContent = "📎";
-          attachBtn.title = b.receipt_url ? "Compartilhar comprovante no WhatsApp" : "Anexar comprovante (último pagamento)";
+          attachBtn.title = (b.receipt_url || b.receipt_path) ? "Compartilhar comprovante no WhatsApp" : "Anexar comprovante (último pagamento)";
           attachBtn.disabled = !canEditBill(b) || ((b.pay_mode !== "installments") ? !b.paid_at : !(Number(b.installments_paid || 0) > 0 || b.paid_at));
           attachBtn.onclick = () => {
-            if (b.receipt_url) return shareBillReceiptWhatsApp(b);
+            if (b.receipt_url || b.receipt_path) return shareBillReceiptWhatsApp(b);
             return pickAndUploadReceipt(b);
           };
 
@@ -1831,16 +1992,47 @@
       }
 
 
-      function shareBillReceiptWhatsApp(b) {
+      async function getBillReceiptUrl(b) {
         try {
-          if (!b?.receipt_url) return toast("Sem comprovante para compartilhar.", "warn", "bill-no-receipt");
-          const txt = `Comprovante: ${b.description || "Conta"} (${b.month})\n${b.receipt_url}`;
-          const url = `https://wa.me/?text=${encodeURIComponent(txt)}`;
-          window.open(url, "_blank");
+          if (b?.receipt_url) return b.receipt_url;
+
+          const path = b?.receipt_path;
+          if (!path) return null;
+
+          const { data, error } = await withTimeout(
+            supabase.storage.from("receipts").createSignedUrl(path, 60),
+            8000,
+            "signed url"
+          );
+          if (error) throw error;
+          return data?.signedUrl || null;
         } catch (e) {
           console.error(e);
-          toast("Não consegui abrir o WhatsApp.", "error", "bill-wa-fail");
+          return null;
         }
+      }
+
+      async function openBillReceipt(b) {
+        const url = await getBillReceiptUrl(b);
+        if (!url) return toast("Sem comprovante.", "warn", "bill-no-receipt-open");
+        window.open(url, "_blank");
+      }
+
+      function shareBillReceiptWhatsApp(b) {
+        (async () => {
+          try {
+            const url = await getBillReceiptUrl(b);
+            if (!url) return toast("Sem comprovante para compartilhar.", "warn", "bill-no-receipt");
+            const txt = `Comprovante: ${b.description || "Conta"} (${b.month})
+${url}`;
+            const wa = `https://wa.me/?text=${encodeURIComponent(txt)}`;
+            window.open(wa, "_blank");
+          } catch (e) {
+            console.error(e);
+            toast("Não consegui abrir o WhatsApp.", "error", "bill-wa-fail");
+          }
+        })();
+
       }
 
       async function pickAndUploadReceipt(bill) {
@@ -1867,10 +2059,7 @@
             );
             if (upErr) throw upErr;
 
-            const { data: pub } = supabase.storage.from("receipts").getPublicUrl(path);
-            const url = pub?.publicUrl || null;
-
-            const patch = { receipt_path: path, receipt_url: url };
+            const patch = { receipt_path: path, receipt_url: null };
             const { data, error } = await withTimeout(
               supabase.from("finance_bills")
                 .update(patch)
@@ -1942,7 +2131,9 @@
         let filtered = items
           .filter(it => {
             const matchesSearch = !q || (it.name_norm || "").includes(q);
-            const matchesNeeds = !showOnlyNeeds || needsBuy(it);
+            let matchesNeeds = true;
+            if (needsFilter === "needs") matchesNeeds = needsBuy(it);
+            if (needsFilter === "noneeds") matchesNeeds = !needsBuy(it);
 
             let matchesEssential = true;
             if (essentialFilter === "essential") matchesEssential = !!it.essential;
@@ -1950,12 +2141,30 @@
 
             return matchesSearch && matchesNeeds && matchesEssential;
           })
-          .sort((a, b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
+          .sort((a, b) => {
+            const na = (a.name || "");
+            const nb = (b.name || "");
+            const qa = Number(a.qty ?? 0);
+            const qb = Number(b.qty ?? 0);
+
+            if (sortMode === "name_desc") return nb.localeCompare(na, "pt-BR");
+            if (sortMode === "qty_asc") {
+              if (qa !== qb) return qa - qb;
+              return na.localeCompare(nb, "pt-BR");
+            }
+            if (sortMode === "qty_desc") {
+              if (qa !== qb) return qb - qa;
+              return na.localeCompare(nb, "pt-BR");
+            }
+            return na.localeCompare(nb, "pt-BR");
+          });
 
         if (!filtered.length) {
           const empty = document.createElement("div");
           empty.className = "sub";
-          empty.textContent = showOnlyNeeds ? "Nenhum item precisa comprar 🙂" : "Nada por aqui 🙂";
+          empty.textContent = (needsFilter === "needs") ? "Nenhum item precisa comprar 🙂"
+            : (needsFilter === "noneeds") ? "Todos precisam comprar 🙂"
+            : "Nada por aqui 🙂";
           list.appendChild(empty);
           return;
         }
@@ -2505,12 +2714,46 @@
       }
 
       // ========= IMPORT / EXPORT INVENTÁRIO =========
+      
       function exportInventoryText() {
-        const sorted = items.slice().sort((a, b) => (a.name || "").localeCompare((b.name || ""), "pt-BR"));
+        const q = norm($("search").value);
+
+        const filtered = items
+          .filter(it => {
+            const matchesSearch = !q || (it.name_norm || "").includes(q);
+            let matchesNeeds = true;
+            if (needsFilter === "needs") matchesNeeds = needsBuy(it);
+            if (needsFilter === "noneeds") matchesNeeds = !needsBuy(it);
+
+            let matchesEssential = true;
+            if (essentialFilter === "essential") matchesEssential = !!it.essential;
+            if (essentialFilter === "not") matchesEssential = !it.essential;
+
+            return matchesSearch && matchesNeeds && matchesEssential;
+          })
+          .sort((a, b) => {
+            const na = (a.name || "");
+            const nb = (b.name || "");
+            const qa = Number(a.qty ?? 0);
+            const qb = Number(b.qty ?? 0);
+
+            if (sortMode === "name_desc") return nb.localeCompare(na, "pt-BR");
+            if (sortMode === "qty_asc") {
+              if (qa !== qb) return qa - qb;
+              return na.localeCompare(nb, "pt-BR");
+            }
+            if (sortMode === "qty_desc") {
+              if (qa !== qb) return qb - qa;
+              return na.localeCompare(nb, "pt-BR");
+            }
+            return na.localeCompare(nb, "pt-BR");
+          });
+
         const lines = [];
-        for (const it of sorted) {
+        for (const it of filtered) {
           lines.push(`${it.name} | ${it.qty} ${it.unit} | min ${it.min_qty || 0} | essencial ${it.essential ? "sim" : "nao"}`);
         }
+
         const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -2520,6 +2763,7 @@
         URL.revokeObjectURL(url);
         toast("Exportado ✅", "success", "inv-export");
       }
+
 
       function importInventory() {
         if (!isOwner) return toast("Somente o owner pode importar.", "warn", "inv-import-owner");
@@ -2657,8 +2901,22 @@
       $("search").addEventListener("input", renderItems);
 
       $("filterList").onclick = () => {
-        showOnlyNeeds = !showOnlyNeeds;
-        $("filterList").textContent = showOnlyNeeds ? "Mostrar tudo" : "Filtrar lista";
+        // ciclo de ordenação: A→Z, Z→A, Qtd ↑, Qtd ↓
+        sortMode = (sortMode === "name_asc")
+          ? "name_desc"
+          : (sortMode === "name_desc")
+            ? "qty_asc"
+            : (sortMode === "qty_asc")
+              ? "qty_desc"
+              : "name_asc";
+
+        const label =
+          sortMode === "name_asc" ? "Ordenar: A→Z"
+            : sortMode === "name_desc" ? "Ordenar: Z→A"
+              : sortMode === "qty_asc" ? "Ordenar: Qtd ↑"
+                : "Ordenar: Qtd ↓";
+
+        $("filterList").textContent = label;
         renderItems();
       };
 
@@ -2670,6 +2928,17 @@
               : "Essenciais: sem essenciais";
         renderItems();
       };
+
+      // ✅ filtro compra (precisa comprar / não precisa)
+      $("filterNeeds").onclick = () => {
+        needsFilter = (needsFilter === "both") ? "needs" : (needsFilter === "needs" ? "noneeds" : "both");
+        $("filterNeeds").textContent =
+          needsFilter === "both" ? "Compra: ambos"
+            : needsFilter === "needs" ? "Compra: só precisa comprar"
+              : "Compra: não precisa comprar";
+        renderItems();
+      };
+
 
       $("exportText").onclick = exportInventoryText;
       $("import").onclick = importInventory;
@@ -2813,15 +3082,19 @@
         ensureFinanceLoaded();
         const type = $("finType").value;
         const method = $("finMethod").value;
-        const card = $("finCard").value.trim();
+        const card = (method === "cc") ? ($("finCardSel").value || "").trim() : null;
         const desc = $("finDesc").value.trim();
         const amount = parseMoneyBRL($("finAmount").value);
 
         if (!desc) return toast("Informe a descrição.", "warn", "tx-desc");
         if (!amount || amount <= 0) return toast("Informe um valor > 0.", "warn", "tx-amt");
-        if (method === "cc" && !card) return toast("Informe o cartão.", "warn", "tx-card");
 
-        const t = { id: uuid(), inventory_id: currentInventoryId, type, method, card: (method === "cc" ? card : null), desc, amount: Math.round(amount * 100) / 100, created_at: new Date().toISOString() };
+        if (method === "cc") {
+          if (!finCards.length) return toast("Cadastre um cartão em Faturas.", "warn", "tx-cc-no-cards");
+          if (!card) return toast("Selecione o cartão.", "warn", "tx-card");
+        }
+
+        const t = { id: uuid(), inventory_id: currentInventoryId, type, method, card, desc, amount: Math.round(amount * 100) / 100, created_at: new Date().toISOString() };
 
         finTx = [t, ...finTx];
         if (!financeCloudOk) finSave();
@@ -2831,7 +3104,6 @@
 
         $("finDesc").value = "";
         $("finAmount").value = formatMoneyBRLFromDigits("0");
-        if (method === "cc") $("finCard").value = card; // mantém o nome do cartão
 
         if (financeCloudOk) {
           try {
@@ -2848,48 +3120,38 @@
         }
       };
 
-      $("ccSet").onclick = async () => {
+      $("cardAdd").onclick = async () => {
         ensureFinanceLoaded();
-        const card = $("ccName").value.trim();
-        const month = $("ccMonth").value;
-        const total = parseMoneyBRL($("ccTotal").value);
-        const paid = parseMoneyBRL($("ccPaid").value);
+        const name = $("cardName").value.trim();
+        const closeDay = Math.min(31, Math.max(1, Number($("cardCloseDay").value || 1)));
+        const dueDay = Math.min(31, Math.max(1, Number($("cardDueDay").value || 10)));
 
-        if (!card) return toast("Informe o cartão.", "warn", "cc-card");
-        if (!month) return toast("Selecione o mês.", "warn", "cc-month");
-        if (total < 0 || paid < 0) return toast("Valores inválidos.", "warn", "cc-val");
-        if (paid > total) return toast("Pago não pode ser maior que Total.", "warn", "cc-paid-gt");
+        if (!name) return toast("Informe o nome do cartão.", "warn", "card-name");
 
-        // upsert by card+month (local)
-        const existing = finCC.find(x => x.card === card && x.month === month);
-        const id = existing?.id || uuid();
-        const c = { id, inventory_id: currentInventoryId, card, month, total: Math.round(total * 100) / 100, paid: Math.round(paid * 100) / 100 };
+        const c = { id: uuid(), name, close_day: closeDay, due_day: dueDay, created_at: new Date().toISOString() };
 
-        finCC = [c, ...finCC.filter(x => x.id !== id)];
+        // evita duplicado por nome
+        finCards = [c, ...finCards.filter(x => String(x.name) !== String(name))];
         if (!financeCloudOk) finSave();
-        renderFinanceAll();
-        toast("Fatura salva ✅", "success", "cc-save");
-        logAction("CC_UPSERT", "fin_cc", id, { card, month, total: c.total, paid: c.paid });
 
-        if (financeCloudOk) {
-          try {
-            const { error } = await withTimeout(
-              supabase.from("finance_cc").upsert(c),
-              9000,
-              "upsert cc"
-            );
-            if (error) throw error;
-          } catch (e) {
-            console.error(e);
-            toast("Falha ao salvar fatura no cloud: " + (e?.message || e), "error", "cc-cloud-fail");
-          }
-        }
+        $("cardName").value = "";
+        $("cardCloseDay").value = "";
+        $("cardDueDay").value = "";
+
+        renderCardSelect();
+        renderCards();
+        toast("Cartão cadastrado ✅", "success", "card-add");
+
+        // (cloud de cards não existe ainda; fica local por enquanto)
       };
 
-      $("finExport").onclick = finExportText;
-      $("finExport2").onclick = finExportText;
+      const _finExport = $("finExport");
+      if (_finExport) _finExport.onclick = finExportText;
+      const _finExport2 = $("finExport2");
+      if (_finExport2) _finExport2.onclick = finExportText;
 
-      $("finClear").onclick = async () => {
+      const _finClear = $("finClear");
+      if (_finClear) _finClear.onclick = async () => {
         if (!isOwner) return toast("Somente o owner pode zerar finanças.", "warn", "fin-clear-owner");
         if (!confirm("Zerar finanças (lancamentos/metas/cartões) ?")) return;
 
@@ -2917,11 +3179,41 @@
         }
       };
 
-      // ✅ Contas/Dívidas: permitir membros criarem (policy do SQL precisa permitir INSERT pra member)
-      $("billPayMode").addEventListener("change", () => {
-        const mode = $("billPayMode").value;
-        $("billInstallRow").classList.toggle("hidden", mode !== "installments");
-      });
+      // ✅ Contas/Dívidas: parcelas (1x..24x) + 'Outro'
+      function buildBillInstallPlan() {
+        const sel = $("billInstallPlan");
+        if (!sel) return;
+
+        const total = parseMoneyBRL($("billAmount")?.value);
+        sel.innerHTML = "";
+
+        for (let n = 1; n <= 24; n++) {
+          const per = n > 0 ? (total / n) : 0;
+          const opt = document.createElement("option");
+          opt.value = String(n);
+          opt.textContent = `${n}x de ${money(per)}`;
+          sel.appendChild(opt);
+        }
+
+        const other = document.createElement("option");
+        other.value = "other";
+        other.textContent = "Outro (digitar manualmente)";
+        sel.appendChild(other);
+
+        // padrão: 1x
+        if (!sel.value) sel.value = "1";
+        syncBillCustomRow();
+      }
+
+      function syncBillCustomRow() {
+        const v = $("billInstallPlan")?.value;
+        const show = (v === "other");
+        $("billCustomInstallRow")?.classList.toggle("hidden", !show);
+      }
+
+      buildBillInstallPlan();
+      $("billAmount")?.addEventListener("input", buildBillInstallPlan);
+      $("billInstallPlan")?.addEventListener("change", syncBillCustomRow);
 
 
 
@@ -2944,31 +3236,54 @@
         };
       }
 
+      // ✅ abrir comprovante (gera signed url, funciona bucket privado/publico)
+      $("billList")?.addEventListener("click", (e) => {
+        const btn = e.target?.closest?.("button.filelink");
+        if (!btn) return;
+        const id = btn.getAttribute("data-bill");
+        const b = bills.find(x => String(x.id) === String(id));
+        if (!b) return;
+        openBillReceipt(b);
+      });
+
+
       // ✅ Contas / Dívidas (à vista ou parcelado)
       $("billAdd").onclick = async () => {
         if (!currentUser || !currentInventoryId) return toast("Faça login primeiro.", "warn", "bill-login");
 
         const description = $("billDesc").value.trim();
-        const amount = parseMoneyBRL($("billAmount").value);
+        const amountTotal = parseMoneyBRL($("billAmount").value);
         const month = $("billMonth").value;
-        const payMode = $("billPayMode").value;
-
-        const instTotalRaw = Number($("billInstallTotal")?.value || 0);
-        const instPaidRaw = Number($("billInstallPaid")?.value || 0);
 
         if (!description) return toast("Informe a descrição da conta/dívida.", "warn", "bill-desc");
-        if (!amount || amount <= 0) return toast("Informe um valor > 0.", "warn", "bill-amount");
+        if (!amountTotal || amountTotal <= 0) return toast("Informe um valor total > 0.", "warn", "bill-amount");
         if (!month) return toast("Selecione o mês.", "warn", "bill-month");
 
+        let payMode = "once";
         let installments_total = 1;
         let installments_paid = 0;
 
-        if (payMode === "installments") {
-          installments_total = instTotalRaw > 1 ? Math.floor(instTotalRaw) : 0;
-          installments_paid = instPaidRaw >= 0 ? Math.floor(instPaidRaw) : 0;
+        const plan = $("billInstallPlan")?.value || "1";
 
-          if (!installments_total) return toast("Informe o total de parcelas (>= 2).", "warn", "bill-inst-total");
-          if (installments_paid > installments_total) return toast("Parcelas pagas não pode ser maior que o total.", "warn", "bill-inst-paid");
+        if (plan === "other") {
+          const customVal = parseMoneyBRL($("billInstallCustomValue")?.value);
+          const customTotal = Math.floor(Number($("billInstallCustomTotal")?.value || 0));
+
+          if (!customVal || customVal <= 0) return toast("Informe o valor da parcela.", "warn", "bill-custom-val");
+          if (!(customTotal >= 2 && customTotal <= 24)) return toast("Informe quantidade de parcelas (2..24).", "warn", "bill-custom-total");
+
+          payMode = "installments";
+          installments_total = customTotal;
+          // aqui a dívida continua com valor total; o valor da parcela é informativo (não precisa no banco)
+        } else {
+          const n = Math.floor(Number(plan || 1));
+          if (n >= 2) {
+            payMode = "installments";
+            installments_total = n;
+          } else {
+            payMode = "once";
+            installments_total = 1;
+          }
         }
 
         overlaySafe(true, "bill-add");
@@ -2976,7 +3291,7 @@
           const payload = {
             inventory_id: currentInventoryId,
             description,
-            amount: Math.round(amount * 100) / 100,
+            amount: Math.round(amountTotal * 100) / 100,
             month,
             pay_mode: payMode,
             installments_total,
@@ -3002,15 +3317,14 @@
           bills = [data, ...bills];
           renderBills();
           toast("Adicionado ✅", "success", "bill-add-ok");
-          logAction("BILL_CREATE", "finance_bills", data.id, { description, amount: payload.amount, month, pay_mode: payMode, installments_total, installments_paid });
+          logAction("BILL_CREATE", "finance_bills", data.id, { description, amount: payload.amount, month, pay_mode: payMode, installments_total });
 
           $("billDesc").value = "";
           $("billAmount").value = formatMoneyBRLFromDigits("0");
-          $("billMonth").value = monthKey(new Date());
-          $("billPayMode").value = "once";
-          $("billInstallTotal").value = "";
-          $("billInstallPaid").value = "";
-          $("billInstallRow").classList.add("hidden");
+          buildBillInstallPlan();
+          $("billInstallCustomValue").value = formatMoneyBRLFromDigits("0");
+          $("billInstallCustomTotal").value = "";
+          $("billCustomInstallRow").classList.add("hidden");
         } catch (e) {
           console.error(e);
           toast("Falha ao adicionar: " + (e?.message || e), "error", "bill-add-fail");
@@ -3020,8 +3334,9 @@
         }
       };
 
+          
 
-      // ========= AUTH STATE =========
+// ========= AUTH STATE =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
