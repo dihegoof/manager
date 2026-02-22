@@ -438,10 +438,20 @@ button.ghost{
 
 /* ✅ anexo / link */
 .filelink{
-  font-weight: 900;
+  display: inline-block;
+  font-weight: 800;
   text-decoration: none;
   color: #0b3a52;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(11,58,82,.25);
+  background: rgba(255,255,255,.7);
+  white-space: nowrap;
 }
+.filelink:active{ transform: scale(.98); }
+
 .filelink:hover{ text-decoration: underline; }
 
 /* =========================
@@ -592,7 +602,7 @@ button.ghost{
    ✅ GRID SIMÉTRICO (Metas / Cartões)
    - deixa a “linha de inputs + botão” bem alinhada no mobile
 ========================= */
-.row.grid3, .row.grid5{
+.row.grid3, .row.grid4, .row.grid5{
   display:grid;
   gap: 10px;
   align-items: center;
@@ -600,6 +610,7 @@ button.ghost{
 }
 
 .row.grid3{ grid-template-columns: 1fr 1fr 1fr; }
+.row.grid4{ grid-template-columns: 1fr 1fr 1fr 1fr; }
 .row.grid5{ grid-template-columns: 1fr 1fr 1fr 1fr 1fr; }
 
 .w100{ width: 100% !important; min-width: 0 !important; }
