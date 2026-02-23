@@ -3370,19 +3370,26 @@ ${url}`;
 
       // ========= FIRST PAINT =========
       document.addEventListener("DOMContentLoaded", async () => {
-        try {
-          const session = await getSession();
-          if (!session?.user) return showLogin();
+  if (booting) return;
 
-          currentUser = session.user;
-          await bootFromProfile();
-          pingLastSeen();
-        } catch (e) {
-          console.error(e);
-          showLogin();
-        }
-      });
+  booting = true;
+  try {
+    const session = await getSession();
+    if (!session?.user) {
+      showLogin();
+      return;
+    }
 
+    currentUser = session.user;
+    await bootFromProfile();
+    pingLastSeen();
+  } catch (e) {
+    console.error(e);
+    showLogin();
+  } finally {
+    booting = false;
+  }
+});
 
       // ========= Offline / Online =========
       window.addEventListener("offline", () =>
