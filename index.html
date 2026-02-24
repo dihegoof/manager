@@ -1,4 +1,6 @@
-  <!doctype html>
+
+
+<!doctype html>
 <html lang="pt-br">
 
 <head>
@@ -238,7 +240,7 @@
           <div>
             <div style="font-weight:900;">Finanças</div>
             <!--<div class="muted" style="margin-top:4px;">
-              Lançamentos / metas / cartões ficam no localStorage. Contas/comprovantes + log = Supabase.
+              Lançamentos / metas / cartões ficam no armazenamento local. Contas/comprovantes + log = Supabase.
             </div>-->
           </div>
 
@@ -324,10 +326,7 @@
 
         <div id="finTabTx" class="hidden">
           <!-- ✅ FATURAS / CARTÕES -->
-          <div style="font-weight:900;">Faturas</div>
-          <div class="muted" style="margin-top:6px;">
-            Cadastre seus cartões aqui. Nos lançamentos, você só consegue usar cartão se existir algum cadastrado.
-          </div>
+          <div style="font-weight:900;">Faturas</di
 
           <!-- ✅ cadastrar cartão -->
           <div class="row mt12 grid4">
@@ -411,7 +410,10 @@
       const round = (v) =>
         Math.round((Number(v) + Number.EPSILON) * 10) / 10;
 
-
+       function isMine(row) {
+  return row && row.created_by === currentUser?.id;
+}
+      
       function escapeHtml(s) {
         return String(s || "")
           .replaceAll("&", "&amp;")
@@ -782,13 +784,14 @@
         buyTimers.set(itemId, t);
       }
 
-      // pending setup (register/join)
-      const PENDING_KEY = "pending_inv_setup_v4";
-      const setPending = (obj) => localStorage.setItem(PENDING_KEY, JSON.stringify(obj));
-      const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "null"); } catch (e) { return null; } };
-      const clearPending = () => localStorage.removeItem(PENDING_KEY);
+      // pending setup (register/join) — cloud-only (sem armazenamento local)
+      let pendingSetup = null;
+      const setPending = (obj) => { pendingSetup = obj; };
+      const getPending = () => pendingSetup;
+      const clearPending = () => { pendingSetup = null; };
 
-      function needsBuy(it) {
+
+function needsBuy(it) {
         const qty = Number(it.qty ?? 0);
         const min = Number(it.min_qty ?? 0);
         return qty <= 0 || (min > 0 && qty <= min);
@@ -859,6 +862,7 @@
           ensureFinanceLoaded();
           renderFinanceAll();
           loadBills();
+          startFinanceRealtime();
           // tentativa de cloud
           ensureFinanceCloud().then(() => {
             // re-render depois que descobrir cloud
@@ -880,77 +884,11 @@
       let finCC = [];
       let finCards = [];
 
-      // local fallback keys
-      function finKeyTx() { return `fin_tx_${currentInventoryId || "none"}`; }
-      function finKeyGoals() { return `fin_goals_${currentInventoryId || "none"}`; }
-      function finKeyCC() { return `fin_cc_${currentInventoryId || "none"}`; }
-function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
-
-
-      function finOldKeyTx() { return `fin_beta_tx_${currentInventoryId || "none"}`; }
-      function finOldKeyGoals() { return `fin_beta_goals_${currentInventoryId || "none"}`; }
-      function finOldKeyCC() { return `fin_beta_cc_${currentInventoryId || "none"}`; }
-
-      function finSave() {
-        try { localStorage.setItem(finKeyTx(), JSON.stringify(finTx)); } catch (e) { }
-        try { localStorage.setItem(finKeyGoals(), JSON.stringify(finGoals)); } catch (e) { }
-        try { localStorage.setItem(finKeyCC(), JSON.stringify(finCC)); } catch (e) { }
-        try { localStorage.setItem(finKeyCards(), JSON.stringify(finCards)); } catch (e) { }
-      }
-
-      function safeParseLS(key) {
-        try {
-          const raw = localStorage.getItem(key);
-          if (!raw) return null;
-          return JSON.parse(raw);
-        } catch (e) { return null; }
-      }
-
-      function finLoad() {
-        // TX
-        let tx = safeParseLS(finKeyTx());
-        if (!Array.isArray(tx)) tx = safeParseLS(finOldKeyTx());
-        finTx = Array.isArray(tx) ? tx : [];
-
-        // GOALS
-        let goals = safeParseLS(finKeyGoals());
-        if (!Array.isArray(goals)) goals = safeParseLS(finOldKeyGoals());
-        finGoals = Array.isArray(goals) ? goals : [];
-
-        // CC (pagamentos de fatura por mês)
-        let cc = safeParseLS(finKeyCC());
-        if (!Array.isArray(cc)) cc = safeParseLS(finOldKeyCC());
-        finCC = Array.isArray(cc) ? cc : [];
-
-        // CARDS (cadastro de cartões)
-        let cards = safeParseLS(finKeyCards());
-        finCards = Array.isArray(cards) ? cards : [];
-
-        // migração simples: se não tem card cadastrado, tenta criar a partir dos lançamentos antigos
-        if (!finCards.length) {
-          const uniq = new Set();
-          for (const t of finTx) {
-            if (t?.method === "cc" && t?.card) uniq.add(String(t.card));
-          }
-          finCards = Array.from(uniq).slice(0, 30).map((name) => ({
-            id: uuid(),
-            name,
-            close_day: 1,
-            due_day: 10,
-            created_at: new Date().toISOString(),
-          }));
-        }
-
-        finSave(); // migra
-      }
-
+      // ✅ Cloud-only (sem armazenamento local)
       function ensureFinanceLoaded() {
         if (financeLoaded) return;
         financeLoaded = true;
-        finLoad();
-        renderCardSelect();
         syncFinMethodUI();
-        buildBillInstallPlan();
       }
 
       function uuid() {
@@ -998,6 +936,73 @@ function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
         `;
       }
 
+      let financeChannel = null;
+
+function startFinanceRealtime() {
+
+  if (financeChannel) return;
+
+  console.log("Realtime finanças iniciado");
+
+  financeChannel = supabase
+    .channel("finance-realtime")
+
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "finance_transactions",
+        filter: `inventory_id=eq.${currentInventoryId}`
+      },
+      () => refreshFinance()
+    )
+
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "finance_debts",
+        filter: `inventory_id=eq.${currentInventoryId}`
+      },
+      () => refreshFinance()
+    )
+
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "finance_goals",
+        filter: `inventory_id=eq.${currentInventoryId}`
+      },
+      () => refreshFinance()
+    )
+
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "finance_bills",
+        filter: `inventory_id=eq.${currentInventoryId}`
+      },
+      () => refreshFinance()
+    )
+
+    .subscribe();
+}
+      
+      async function refreshFinance() {
+
+  console.log("Realtime update recebido");
+
+  await ensureFinanceLoaded();
+
+  renderFinanceAll();
+
+}
 
       function renderFinanceSummary() {
         const { income, expense, available, ccExpense, carry } = calcFinance();
@@ -1082,7 +1087,6 @@ function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
                 const n = Math.round(Number(val) * 100) / 100;
 
                 finGoals = finGoals.map(x => x.id === g.id ? { ...x, saved: Math.round((Number(x.saved || 0) + n) * 100) / 100 } : x);
-                if (!financeCloudOk) finSave();
                 renderGoals();
                 renderFinanceSummary();
                 renderMiniPanel();
@@ -1108,13 +1112,12 @@ function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
           const del = document.createElement("button");
           del.textContent = "🗑️";
           del.title = "Excluir meta";
-          del.disabled = !isOwner;
+          del.disabled = !(isOwner || isMine(g));
           del.onclick = async () => {
             if (!isOwner) return toast("Somente o owner pode excluir metas.", "warn", "goal-del-owner");
             if (!confirm(`Excluir a meta "${g.name}"?`)) return;
 
             finGoals = finGoals.filter(x => x.id !== g.id);
-            if (!financeCloudOk) finSave();
             renderGoals();
             renderFinanceSummary();
             renderMiniPanel();
@@ -1187,13 +1190,12 @@ function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
           const del = document.createElement("button");
           del.textContent = "🗑️";
           del.title = isOwner ? "Excluir lançamento" : "Somente owner pode excluir lançamentos";
-          del.disabled = !isOwner;
+          del.disabled = !(isOwner || isMine(t));
           del.onclick = async () => {
             if (!isOwner) return toast("Somente o owner pode excluir lançamentos.", "warn", "fin-del-owner");
             if (!confirm("Excluir este lançamento?")) return;
 
             finTx = finTx.filter(x => x.id !== t.id);
-            if (!financeCloudOk) finSave();
             renderFinanceAll();
             toast("Excluído ✅", "success", "fin-del");
             logAction("FIN_TX_DELETE", "fin_tx", t.id, { desc: t.desc, amount: t.amount });
@@ -1232,7 +1234,6 @@ function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
         const id = existing?.id || uuid();
         const rec = { id, inventory_id: currentInventoryId, card: cardName, month, total: 0, paid: Math.round(Number(paid || 0) * 100) / 100 };
         finCC = [rec, ...finCC.filter(x => x.id !== id)];
-        if (!financeCloudOk) finSave();
       }
 
       function calcCardMonthTotal(cardName, month) {
@@ -1311,16 +1312,28 @@ function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
           const del = document.createElement("button");
           del.textContent = "🗑️";
           del.title = "Remover cartão";
-          del.disabled = !isOwner;
+          del.disabled = isOwner ? false : true;
           del.onclick = async () => {
-            if (!isOwner) return toast("Somente o owner pode remover cartões.", "warn", "card-del-owner");
+            const canDel = isOwner || (authUserId && c.created_by === authUserId);
+            if (!canDel) return toast("Você só pode remover cartões criados por você (owner pode tudo).", "warn", "card-del-own");
             if (!confirm(`Remover o cartão "${c.name}"?`)) return;
-            finCards = finCards.filter(x => x.id !== c.id);
-            if (!financeCloudOk) finSave();
-            renderCardSelect();
-            renderCards();
-            renderFinanceSummary();
-            renderMiniPanel();
+            if (!financeCloudOk) return toast("Finanças cloud indisponível.", "warn");
+            try {
+              const { error } = await withTimeout(
+                supabase.from("finance_cards").delete().eq("inventory_id", currentInventoryId).eq("id", c.id),
+                12000,
+                "delete card"
+              );
+              if (error) throw error;
+              finCards = finCards.filter(x => x.id !== c.id);
+              renderCardSelect();
+              renderCards();
+              renderFinanceSummary();
+              renderMiniPanel();
+              toast("Cartão removido.", "ok");
+            } catch (e) {
+              toast("Erro ao remover cartão: " + (e?.message || e), "err");
+            }
           };
 
           controls.append(payBtn, del);
@@ -1376,9 +1389,20 @@ function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
           const paidPrev = getCardPaid(c.name, prev);
           const rest = Math.max(0, totalPrev - paidPrev);
           if (rest <= 0) continue;
-
-          const key = `fin_roll_${currentInventoryId}_${prev}_${c.name}`;
-          if (localStorage.getItem(key) === "1") continue;
+          // evita duplicar se recarregar (confere se já existe uma dívida criada para este mês/cartão)
+          try {
+            const { data: existing } = await withTimeout(
+              supabase.from("finance_bills")
+                .select("id")
+                .eq("inventory_id", currentInventoryId)
+                .eq("description", `Fatura ${c.name} (${prev})`)
+                .eq("month", prev)
+                .limit(1),
+              6000,
+              "check rollover duplicate"
+            );
+            if (Array.isArray(existing) && existing.length) continue;
+          } catch (e) { /* se falhar, segue */ }
 
           try {
             const payload = {
@@ -1401,10 +1425,7 @@ function finKeyCards() { return `fin_cards_${currentInventoryId || "none"}`; }
               9000,
               "rollover bill"
             );
-            if (error) throw error;
-
-            localStorage.setItem(key, "1");
-            toast(`Virou dívida: fatura ${c.name} (${prev})`, "warn", "rollover-created");
+            if (error) throw error;            toast(`Virou dívida: fatura ${c.name} (${prev})`, "warn", "rollover-created");
           } catch (e) {
             console.warn("rollover fail:", e?.message || e);
           }
@@ -1473,7 +1494,7 @@ function renderFinanceAll() {
         if (method === "cc") {
           // bloqueia se não tem cartão cadastrado
           if (!finCards.length) {
-            toast("Cadastre um cartão em Faturas primeiro.", "warn", "cc-no-cards");
+            toast("Cadastre um cartão em faturas primeiro.", "warn", "cc-no-cards");
             $("finMethod").value = "cash";
             sel.style.display = "none";
             sel.innerHTML = "";
@@ -1507,44 +1528,72 @@ function renderFinanceAll() {
 
       // ========= FINANÇAS CLOUD (opcional) =========
       // Se as tabelas finance_tx/finance_goals/finance_cc existirem e tiver policy,
-      // a gente usa realtime igual inventário. Se não, cai pro localStorage sem quebrar nada.
+      // a gente usa realtime igual inventário. Se não, bloqueia e mostra erro sem quebrar nada.
       let financeCloudOk = false;
       let rtFinTx = null;
       let rtFinGoals = null;
       let rtFinCC = null;
+      let rtFinCards = null;
 
       async function ensureFinanceCloud() {
         if (!currentInventoryId || !currentUser) return false;
         if (financeCloudOk) return true;
 
         try {
-          const { error } = await withTimeout(
-            supabase.from("finance_tx").select("id").eq("inventory_id", currentInventoryId).limit(1),
-            5000,
-            "check finance cloud"
-          );
-          if (error) throw error;
+          // "toca" as tabelas principais pra confirmar que existem e que RLS está ok
+          const checks = await Promise.all([
+            withTimeout(
+              supabase.from("finance_tx").select("id").eq("inventory_id", currentInventoryId).limit(1),
+              6000,
+              "check finance_tx"
+            ),
+            withTimeout(
+              supabase.from("finance_goals").select("id").eq("inventory_id", currentInventoryId).limit(1),
+              6000,
+              "check finance_goals"
+            ),
+            withTimeout(
+              supabase.from("finance_cc").select("id").eq("inventory_id", currentInventoryId).limit(1),
+              6000,
+              "check finance_cc"
+            ),
+            withTimeout(
+              supabase.from("finance_bills").select("id").eq("inventory_id", currentInventoryId).limit(1),
+              6000,
+              "check finance_bills"
+            ),
+            withTimeout(
+              supabase.from("finance_cards").select("id").eq("inventory_id", currentInventoryId).limit(1),
+              6000,
+              "check finance_cards"
+            ),
+          ]);
+
+          const firstErr = checks.find(r => r && r.error)?.error;
+          if (firstErr) throw firstErr;
+
           financeCloudOk = true;
-          await loadFinanceCloudAll();
-          await startRealtimeFinance(currentInventoryId);
           return true;
         } catch (e) {
+          console.warn("Finance cloud check failed:", e);
           financeCloudOk = false;
           return false;
         }
       }
 
-      async function loadFinanceCloudAll() {
+async function loadFinanceCloudAll() {
         if (!financeCloudOk) return;
         try {
-          const [{ data: tx }, { data: goals }, { data: cc }] = await Promise.all([
+          const [{ data: tx }, { data: goals }, { data: cc }, { data: cards }] = await Promise.all([
             withTimeout(supabase.from("finance_tx").select("*").eq("inventory_id", currentInventoryId), 9000, "load finance tx"),
             withTimeout(supabase.from("finance_goals").select("*").eq("inventory_id", currentInventoryId), 9000, "load finance goals"),
             withTimeout(supabase.from("finance_cc").select("*").eq("inventory_id", currentInventoryId), 9000, "load finance cc"),
+            withTimeout(supabase.from("finance_cards").select("*").eq("inventory_id", currentInventoryId), 9000, "load finance cards"),
           ]);
           finTx = Array.isArray(tx) ? tx : [];
           finGoals = Array.isArray(goals) ? goals : [];
           finCC = Array.isArray(cc) ? cc : [];
+          finCards = Array.isArray(cards) ? cards.filter(c=>c.active!==false) : [];
         } catch (e) {
           console.error(e);
           financeCloudOk = false;
@@ -1555,7 +1604,8 @@ function renderFinanceAll() {
         try { if (rtFinTx) await supabase.removeChannel(rtFinTx); } catch (e) { }
         try { if (rtFinGoals) await supabase.removeChannel(rtFinGoals); } catch (e) { }
         try { if (rtFinCC) await supabase.removeChannel(rtFinCC); } catch (e) { }
-        rtFinTx = rtFinGoals = rtFinCC = null;
+        try { if (rtFinCards) await supabase.removeChannel(rtFinCards); } catch (e) { }
+        rtFinTx = rtFinGoals = rtFinCC = rtFinCards = null;
       }
 
       async function startRealtimeFinance(invId) {
@@ -1634,9 +1684,8 @@ function renderFinanceAll() {
       }
 
       function canEditBill(b) {
-        if (isOwner) return true;
-        return b?.payer_user_id === currentUser?.id;
-      }
+  return true;
+}
 
       // ========= MODAL PAGAMENTO =========
       let payCtx = null; // { bill, wantPaid }
@@ -1862,7 +1911,7 @@ function renderFinanceAll() {
           const payBtn = document.createElement("button");
           payBtn.textContent = paid ? "✔" : "💳";
           payBtn.title = paid ? "Marcar como não pago" : "Marcar como pago";
-          payBtn.disabled = !canEditBill(b);
+          payBtn.disabled = false;
           payBtn.onclick = async () => {
             if (!canEditBill(b)) return;
 
@@ -2478,7 +2527,7 @@ ${url}`;
         try {
           await bootInventory(invId);
         } catch (e) {
-          console.error(e);
+          console.error("ERRO DETALHADO:", JSON.stringify(e, null, 2));
           toast("Falha ao abrir inventário: " + (e?.message || e), "error", "boot-inv-fail");
         }
       }
@@ -3047,7 +3096,6 @@ ${url}`;
 
         // local
         finGoals = [g, ...finGoals];
-        if (!financeCloudOk) finSave();
         renderFinanceAll();
         toast("Meta adicionada ✅", "success", "goal-add");
         logAction("GOAL_CREATE", "fin_goal", g.id, { name, target: g.target });
@@ -3090,14 +3138,13 @@ ${url}`;
         if (!amount || amount <= 0) return toast("Informe um valor > 0.", "warn", "tx-amt");
 
         if (method === "cc") {
-          if (!finCards.length) return toast("Cadastre um cartão em Faturas.", "warn", "tx-cc-no-cards");
+          if (!finCards.length) return toast("Cadastre um cartão em faturas.", "warn", "tx-cc-no-cards");
           if (!card) return toast("Selecione o cartão.", "warn", "tx-card");
         }
 
         const t = { id: uuid(), inventory_id: currentInventoryId, type, method, card, desc, amount: Math.round(amount * 100) / 100, created_at: new Date().toISOString() };
 
         finTx = [t, ...finTx];
-        if (!financeCloudOk) finSave();
         renderFinanceAll();
         toast("Lançamento adicionado ✅", "success", "tx-add");
         logAction("FIN_TX_CREATE", "fin_tx", t.id, { type, method, card: t.card, desc, amount: t.amount });
@@ -3121,28 +3168,45 @@ ${url}`;
       };
 
       $("cardAdd").onclick = async () => {
-        ensureFinanceLoaded();
-        const name = $("cardName").value.trim();
-        const closeDay = Math.min(31, Math.max(1, Number($("cardCloseDay").value || 1)));
-        const dueDay = Math.min(31, Math.max(1, Number($("cardDueDay").value || 10)));
+        const name = ($("cardName").value || "").trim();
+        const closeDay = parseInt($("cardCloseDay").value, 10);
+        const dueDay = parseInt($("cardDueDay").value, 10);
 
-        if (!name) return toast("Informe o nome do cartão.", "warn", "card-name");
+        if (!name) return toast("Informe o nome do cartão.", "warn");
+        if (!(closeDay >= 1 && closeDay <= 31)) return toast("Dia de fechamento inválido (1-31).", "warn");
+        if (!(dueDay >= 1 && dueDay <= 31)) return toast("Dia de vencimento inválido (1-31).", "warn");
+        if (!currentInventoryId) return toast("Selecione/entre em um inventário primeiro.", "warn");
+        if (!financeCloudOk) return toast("Finanças cloud indisponível (verifique RLS/tabelas).", "warn");
 
-        const c = { id: uuid(), name, close_day: closeDay, due_day: dueDay, created_at: new Date().toISOString() };
+        try {
+          const payload = {
+            inventory_id: currentInventoryId,
+            name,
+            name_norm: norm(name),
+            close_day: closeDay,
+            due_day: dueDay,
+            active: true
+          };
 
-        // evita duplicado por nome
-        finCards = [c, ...finCards.filter(x => String(x.name) !== String(name))];
-        if (!financeCloudOk) finSave();
+          const { data, error } = await withTimeout(
+            supabase.from("finance_cards").insert(payload).select("*").single(),
+            12000,
+            "insert card"
+          );
+          if (error) throw error;
 
-        $("cardName").value = "";
-        $("cardCloseDay").value = "";
-        $("cardDueDay").value = "";
+          finCards.unshift(data);
+          renderCards();
+          renderCardSelect();
+          syncFinMethodUI();
 
-        renderCardSelect();
-        renderCards();
-        toast("Cartão cadastrado ✅", "success", "card-add");
-
-        // (cloud de cards não existe ainda; fica local por enquanto)
+          $("cardName").value = "";
+          $("cardCloseDay").value = "";
+          $("cardDueDay").value = "";
+          toast("Cartão cadastrado.", "ok");
+        } catch (e) {
+          toast("Erro ao salvar cartão: " + (e?.message || e), "err");
+        }
       };
 
       const _finExport = $("finExport");
@@ -3158,7 +3222,6 @@ ${url}`;
         finTx = [];
         finGoals = [];
         finCC = [];
-        finSave();
         renderFinanceAll();
         toast("Finanças zeradas ✅", "success", "fin-clear");
 
@@ -3370,26 +3433,19 @@ ${url}`;
 
       // ========= FIRST PAINT =========
       document.addEventListener("DOMContentLoaded", async () => {
-  if (booting) return;
+        try {
+          const session = await getSession();
+          if (!session?.user) return showLogin();
 
-  booting = true;
-  try {
-    const session = await getSession();
-    if (!session?.user) {
-      showLogin();
-      return;
-    }
+          currentUser = session.user;
+          await bootFromProfile();
+          pingLastSeen();
+        } catch (e) {
+          console.error(e);
+          showLogin();
+        }
+      });
 
-    currentUser = session.user;
-    await bootFromProfile();
-    pingLastSeen();
-  } catch (e) {
-    console.error(e);
-    showLogin();
-  } finally {
-    booting = false;
-  }
-});
 
       // ========= Offline / Online =========
       window.addEventListener("offline", () =>
