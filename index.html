@@ -1,5 +1,3 @@
-
-
 <!doctype html>
 <html lang="pt-br">
 
@@ -326,7 +324,7 @@
 
         <div id="finTabTx" class="hidden">
           <!-- ✅ FATURAS / CARTÕES -->
-          <div style="font-weight:900;">Faturas</di
+          <div style="font-weight:900;">Faturas</div>
 
           <!-- ✅ cadastrar cartão -->
           <div class="row mt12 grid4">
@@ -355,8 +353,10 @@
 
           <!-- ✅ 'Outro' para valor de parcela manual -->
           <div id="billCustomInstallRow" class="row mt10 hidden grid3">
-            <input id="billInstallCustomValue" class="money-input w100" inputmode="numeric" placeholder="Valor da parcela (R$)" />
-            <input id="billInstallCustomTotal" class="w100" type="number" min="2" max="24" step="1" placeholder="Qtd parcelas (2..24)" />
+            <input id="billInstallCustomValue" class="money-input w100" inputmode="numeric"
+              placeholder="Valor da parcela (R$)" />
+            <input id="billInstallCustomTotal" class="w100" type="number" min="2" max="24" step="1"
+              placeholder="Qtd parcelas (2..24)" />
             <div class="muted" style="align-self:center;">* Se escolher “Outro”, informe valor e quantidade.</div>
           </div>
 
@@ -369,7 +369,7 @@
           <div class="divider"></div>
 
           <!-- ✅ DÍVIDAS PARCELADAS (Supabase) -->
-</div>
+        </div>
       </div>
     </div>
   </div><!-- Footer -->
@@ -410,10 +410,10 @@
       const round = (v) =>
         Math.round((Number(v) + Number.EPSILON) * 10) / 10;
 
-       function isMine(row) {
-  return row && row.created_by === currentUser?.id;
-}
-      
+      function isMine(row) {
+        return row && row.created_by === currentUser?.id;
+      }
+
       function escapeHtml(s) {
         return String(s || "")
           .replaceAll("&", "&amp;")
@@ -524,7 +524,7 @@
       }
 
       fillMonthSelect("billMonth");
-      
+
       // Footer
       $("footer").innerHTML = `© ${new Date().getFullYear()}
         <a href="https://github.com/Dihegoof" target="_blank" rel="noopener">Dihego Nunes</a>
@@ -694,7 +694,7 @@
           if (!rows.length) {
             const empty = document.createElement("div");
             empty.className = "sub";
-            empty.textContent = "Sem logs ainda 🙂";
+            empty.textContent = "Sem logs ainda ";
             host.appendChild(empty);
             return;
           }
@@ -791,7 +791,7 @@
       const clearPending = () => { pendingSetup = null; };
 
 
-function needsBuy(it) {
+      function needsBuy(it) {
         const qty = Number(it.qty ?? 0);
         const min = Number(it.min_qty ?? 0);
         return qty <= 0 || (min > 0 && qty <= min);
@@ -859,15 +859,20 @@ function needsBuy(it) {
           inv.classList.add("hidden");
           fin.classList.remove("hidden");
           btn.textContent = "Inventário";
+
           ensureFinanceLoaded();
-          renderFinanceAll();
           loadBills();
-          startFinanceRealtime();
-          // tentativa de cloud
-          ensureFinanceCloud().then(() => {
-            // re-render depois que descobrir cloud
+          ensureFinanceCloud().then(async (ok) => {
+            if (ok) {
+              await loadFinanceCloudAll();
+              renderCardSelect();
+              syncFinMethodUI();
+              await handleCardRolloverIfNeeded(); // opcional: seu rollover
+              await startRealtimeFinance(currentInventoryId);
+            }
             renderFinanceAll();
           });
+
         } else {
           fin.classList.add("hidden");
           inv.classList.remove("hidden");
@@ -936,74 +941,6 @@ function needsBuy(it) {
         `;
       }
 
-      let financeChannel = null;
-
-function startFinanceRealtime() {
-
-  if (financeChannel) return;
-
-  console.log("Realtime finanças iniciado");
-
-  financeChannel = supabase
-    .channel("finance-realtime")
-
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "finance_transactions",
-        filter: `inventory_id=eq.${currentInventoryId}`
-      },
-      () => refreshFinance()
-    )
-
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "finance_debts",
-        filter: `inventory_id=eq.${currentInventoryId}`
-      },
-      () => refreshFinance()
-    )
-
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "finance_goals",
-        filter: `inventory_id=eq.${currentInventoryId}`
-      },
-      () => refreshFinance()
-    )
-
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "finance_bills",
-        filter: `inventory_id=eq.${currentInventoryId}`
-      },
-      () => refreshFinance()
-    )
-
-    .subscribe();
-}
-      
-      async function refreshFinance() {
-
-  console.log("Realtime update recebido");
-
-  await ensureFinanceLoaded();
-
-  renderFinanceAll();
-
-}
-
       function renderFinanceSummary() {
         const { income, expense, available, ccExpense, carry } = calcFinance();
 
@@ -1044,7 +981,7 @@ function startFinanceRealtime() {
         if (!finGoals.length) {
           const empty = document.createElement("div");
           empty.className = "sub";
-          empty.textContent = "Sem metas ainda 🙂";
+          empty.textContent = "Sem metas ainda ";
           host.appendChild(empty);
           return;
         }
@@ -1158,7 +1095,7 @@ function startFinanceRealtime() {
         if (!sorted.length) {
           const empty = document.createElement("div");
           empty.className = "sub";
-          empty.textContent = "Sem lançamentos ainda 🙂";
+          empty.textContent = "Sem lançamentos ainda ";
           host.appendChild(empty);
           return;
         }
@@ -1272,7 +1209,7 @@ function startFinanceRealtime() {
         if (!finCards.length) {
           const empty = document.createElement("div");
           empty.className = "sub";
-          empty.textContent = "Sem cartões cadastrados 🙂";
+          empty.textContent = "Sem cartões cadastrados ";
           host.appendChild(empty);
           return;
         }
@@ -1370,7 +1307,7 @@ function startFinanceRealtime() {
         });
       }
 
-        
+
 
 
       function prevMonthKey() {
@@ -1425,14 +1362,14 @@ function startFinanceRealtime() {
               9000,
               "rollover bill"
             );
-            if (error) throw error;            toast(`Virou dívida: fatura ${c.name} (${prev})`, "warn", "rollover-created");
+            if (error) throw error; toast(`Virou dívida: fatura ${c.name} (${prev})`, "warn", "rollover-created");
           } catch (e) {
             console.warn("rollover fail:", e?.message || e);
           }
         }
       }
 
-function renderFinanceAll() {
+      function renderFinanceAll() {
         renderFinanceSummary();
         renderGoals();
         renderFinanceTx();
@@ -1581,7 +1518,7 @@ function renderFinanceAll() {
         }
       }
 
-async function loadFinanceCloudAll() {
+      async function loadFinanceCloudAll() {
         if (!financeCloudOk) return;
         try {
           const [{ data: tx }, { data: goals }, { data: cc }, { data: cards }] = await Promise.all([
@@ -1593,7 +1530,7 @@ async function loadFinanceCloudAll() {
           finTx = Array.isArray(tx) ? tx : [];
           finGoals = Array.isArray(goals) ? goals : [];
           finCC = Array.isArray(cc) ? cc : [];
-          finCards = Array.isArray(cards) ? cards.filter(c=>c.active!==false) : [];
+          finCards = Array.isArray(cards) ? cards.filter(c => c.active !== false) : [];
         } catch (e) {
           console.error(e);
           financeCloudOk = false;
@@ -1684,8 +1621,8 @@ async function loadFinanceCloudAll() {
       }
 
       function canEditBill(b) {
-  return true;
-}
+        return true;
+      }
 
       // ========= MODAL PAGAMENTO =========
       let payCtx = null; // { bill, wantPaid }
@@ -1860,10 +1797,10 @@ async function loadFinanceCloudAll() {
             : bills.filter(b => !isDone(b));
 
         const emptyTxt = mode === "history"
-          ? "Sem dívidas quitadas ainda 🙂"
+          ? "Sem dívidas quitadas ainda "
           : mode === "all"
-            ? "Sem contas ainda 🙂"
-            : "Sem contas pendentes 🙂";
+            ? "Sem contas ainda "
+            : "Sem contas pendentes ";
 
         if (!view.length) {
           const empty = document.createElement("div");
@@ -2211,9 +2148,9 @@ ${url}`;
         if (!filtered.length) {
           const empty = document.createElement("div");
           empty.className = "sub";
-          empty.textContent = (needsFilter === "needs") ? "Nenhum item precisa comprar 🙂"
-            : (needsFilter === "noneeds") ? "Todos precisam comprar 🙂"
-            : "Nada por aqui 🙂";
+          empty.textContent = (needsFilter === "needs") ? "Nenhum item precisa comprar "
+            : (needsFilter === "noneeds") ? "Todos precisam comprar "
+              : "Nada por aqui ";
           list.appendChild(empty);
           return;
         }
@@ -2763,7 +2700,7 @@ ${url}`;
       }
 
       // ========= IMPORT / EXPORT INVENTÁRIO =========
-      
+
       function exportInventoryText() {
         const q = norm($("search").value);
 
@@ -3397,9 +3334,9 @@ ${url}`;
         }
       };
 
-          
 
-// ========= AUTH STATE =========
+
+      // ========= AUTH STATE =========
       let booting = false;
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -3458,4 +3395,5 @@ ${url}`;
     });
   </script>
 </body>
+
 </html>
