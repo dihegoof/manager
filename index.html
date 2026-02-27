@@ -1583,6 +1583,14 @@
               if (ev === "DELETE") finCC = finCC.filter(x => x.id !== payload.old.id);
               if (!$("financeView")?.classList.contains("hidden")) renderFinanceAll();
             })
+
+          .on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table: "finance_bills",
+            filter: "inventory_id=eq." + inventoryId
+          }, scheduleReload)
+          
           .subscribe();
       }
 
