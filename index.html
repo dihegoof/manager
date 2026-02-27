@@ -1542,7 +1542,8 @@
         try { if (rtFinGoals) await supabase.removeChannel(rtFinGoals); } catch (e) { }
         try { if (rtFinCC) await supabase.removeChannel(rtFinCC); } catch (e) { }
         try { if (rtFinCards) await supabase.removeChannel(rtFinCards); } catch (e) { }
-        rtFinTx = rtFinGoals = rtFinCC = rtFinCards = null;
+        try { if (rtBills) await supabase.removeChannel(rtBills); } catch (e) { }
+        rtFinTx = rtFinGoals = rtFinCC = rtFinCards = rtBills = null;
       }
 
       async function startRealtimeFinance(invId) {
@@ -1584,18 +1585,48 @@
               if (!$("financeView")?.classList.contains("hidden")) renderFinanceAll();
             })
 
-          .on("postgres_changes", {
-            event: "*",
-            schema: "public",
-            table: "finance_bills",
-            filter: "inventory_id=eq." + inventoryId
-          }, scheduleReload)
-          
+        rtFinCards = supabase
+          .channel("rt-fin-cards-" + invId)
+          .on("postgres_changes",
+            { event: "*", schema: "public", table: "finance_cards", filter: `inventory_id=eq.${invId}` },
+            (payload) => {
+              const ev = payload.eventType;
+              if (ev === "INSERT") finCards = [payload.new, ...finCards.filter(x => x.id !== payload.new.id)];
+              if (ev === "UPDATE") finCards = finCards.map(x => x.id === payload.new.id ? payload.new : x);
+              if (ev === "DELETE") finCards = finCards.filter(x => x.id !== payload.old.id);
+
+              // mantém seu filtro de active
+              finCards = finCards.filter(c => c.active !== false);
+
+              if (!$("financeView")?.classList.contains("hidden")) {
+                renderCardSelect();
+                syncFinMethodUI();
+                renderFinanceAll();
+              }
+            })
+
+        rtBills = supabase
+          .channel("rt-fin-bills-" + invId)
+          .on("postgres_changes",
+            { event: "*", schema: "public", table: "finance_bills", filter: `inventory_id=eq.${invId}` },
+            (payload) => {
+              const ev = payload.eventType;
+              if (ev === "INSERT") bills = [payload.new, ...bills.filter(x => x.id !== payload.new.id)];
+              if (ev === "UPDATE") bills = bills.map(x => x.id === payload.new.id ? payload.new : x);
+              if (ev === "DELETE") bills = bills.filter(x => x.id !== payload.old.id);
+
+              // só renderiza se a tela de finanças estiver aberta
+              if (!$("financeView")?.classList.contains("hidden")) {
+                renderBills();
+              }
+            }
+          )
           .subscribe();
       }
 
       // ========= CONTAS / DÍVIDAS (Supabase) =========
       let bills = [];
+      let rtBills = null;
 
       async function loadBills() {
         if (!currentInventoryId) return;
