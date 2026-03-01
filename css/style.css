@@ -694,3 +694,30 @@ button.ghost{
     grid-column: auto !important;
   }
 }
+
+.toast-section{
+  background: var(--card);
+  border-radius: var(--radius);
+
+  padding: 18px;
+  margin-bottom: 18px;
+
+  border: 1px solid rgba(255,255,255,.55);
+  box-shadow: var(--shadow);
+}
+
+.ios-container{
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 14px;
+}
+
+.toast-section+.toast-section {
+  margin-top: 6px;
+}
+
+input {
+  flex: 1;
+  min-width: 140px;
+}
