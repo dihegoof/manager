@@ -6757,7 +6757,7 @@ ${url}`;
 
             if (!customVal || customVal <= 0) return toast("Informe o valor da parcela.", "warn", "bill-custom-val");
 
-            if (!(customTotal >= 2 && customTotal <= 24)) return toast("Informe quantidade de parcelas (2..24).", "warn", "bill-custom-total");
+            if (!(customTotal >= 2 && customTotal <= 999)) return toast("Informe quantidade de parcelas (2..24).", "warn", "bill-custom-total");
 
 
 
