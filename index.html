@@ -850,7 +850,6 @@
       const APP_URL = "https://dihegoof.github.io/manager/";
       
       
-      
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         
         
@@ -1366,8 +1365,6 @@
         
         
         // ========= STATE =========
-        
-        let currentUser = null;
         
         let currentInventoryId = null;
         
@@ -6408,7 +6405,6 @@ ${url}`;
             if (!finCards.length) return toast("Cadastre um cartão em faturas.", "warn", "tx-cc-no-cards");
             
             if (!card) return toast("Selecione o cartão.", "warn", "tx-card");
-            
           }
           
           
@@ -6921,55 +6917,35 @@ ${url}`;
           
         };
         
-        
-        
-        
-        
-        
-        
         // ========= AUTH STATE =========
-        
-        let booting = false;
-        
-        
         
         supabase.auth.onAuthStateChange(async (_event, session) => {
           
           if (booting) return;
-          
-          
           
           if (!session?.user) {
             
             await stopRealtime();
             
             currentUser = null;
-            
             currentInventoryId = null;
-            
             items = [];
-            
             members = [];
-            
             isOwner = false;
-            
             bills = [];
             
             resetEdit();
-            
             showLogin();
             
             return;
-            
           }
-          
-          
           
           booting = true;
           
           try {
             
-            currentUser = sessionUser;
+            // 🔥 CORREÇÃO AQUI
+            currentUser = session.user;
             
             await bootFromProfile();
             
@@ -6978,7 +6954,6 @@ ${url}`;
           } catch (e) {
             
             console.error(e);
-            
             toast("Falha ao iniciar: " + (e?.message || e), "error", "boot-fail");
             
           } finally {
@@ -6988,7 +6963,6 @@ ${url}`;
           }
           
         });
-        
         
         
         // ========= FIRST PAINT =========
@@ -7045,4 +7019,5 @@ ${url}`;
       }
     </script>
 </body>
+
 </html>
