@@ -178,10 +178,13 @@
           
         </div>
         
-        <div class="row mt10">
-          
+        <div class="row mt10" style="position:relative;">
           <input id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" />
           
+          <button id="showLoginPass" type="button" style="position:absolute; right:8px; top:50%; transform:translateY(-50%);
+           background:none; border:none; font-size:12px; opacity:.6;">
+            ver
+          </button>
         </div>
         
         
@@ -210,12 +213,14 @@
           
         </div>
         
-        <div class="row mt10">
-          
+        <div class="row mt10" style="position:relative;">
           <input id="regPass" type="password" placeholder="Senha" autocomplete="new-password" />
           
+          <button id="showRegPass" type="button" style="position:absolute; right:8px; top:50%; transform:translateY(-50%);
+           background:none; border:none; font-size:12px; opacity:.6;">
+            ver
+          </button>
         </div>
-        
         
         
         <div class="row mt10" style="align-items:center;">
@@ -857,6 +862,10 @@
         
       });
       
+      
+      
+      let currentUser = null;
+      
       const ready = (fn) =>
         
         document.readyState === "loading"
@@ -866,7 +875,6 @@
         
         :
         fn();
-      
       
       async function loadProfileFast() {
         
@@ -878,15 +886,15 @@
         
       }
       
+      
+      
       ready(() => {
         
-        initAuth();
+        
         
         // ========= HELPERS =========
         
         const $ = (id) => document.getElementById(id);
-        
-        
         
         const norm = (s) =>
           
@@ -1081,6 +1089,26 @@
         }
         
         
+        function holdToShow(passInputId, btnId) {
+          const input = $(passInputId);
+          const btn = $(btnId);
+          
+          if (!input || !btn) return;
+          
+          const show = () => input.type = "text";
+          const hide = () => input.type = "password";
+          
+          // mobile + desktop
+          btn.addEventListener("mousedown", show);
+          btn.addEventListener("mouseup", hide);
+          btn.addEventListener("mouseleave", hide);
+          
+          btn.addEventListener("touchstart", show);
+          btn.addEventListener("touchend", hide);
+          
+          input.blur();
+        }
+        
         
         function initMoneyMasks() {
           
@@ -1089,6 +1117,8 @@
         }
         
         initMoneyMasks();
+        holdToShow("loginPass", "showLoginPass");
+        holdToShow("regPass", "showRegPass");
         
         
         
@@ -1367,27 +1397,6 @@
         // ========= STATE =========
         
         let currentInventoryId = null;
-        
-        async function initAuth() {
-          
-          const { data } = await supabase.auth.getUser();
-          
-          const user = data?.user;
-          
-          if (!user) {
-            
-            showLogin();
-            return;
-            
-          }
-          
-          currentUser = user;
-          
-          showApp();
-          
-          loadProfileFast().catch(() => {});
-          
-        }
         
         
         let items = [];
@@ -2642,7 +2651,7 @@ ${zeroTxt}
             
             del.onclick = async () => {
               
-              const canDel = isOwner || (authUserId && c.created_by === authUserId);
+              const canDel = isOwner || (c.created_by === currentUser?.id);
               
               if (!canDel) return toast("Você só pode remover cartões criados por você (owner pode tudo).", "warn", "card-del-own");
               
@@ -5060,7 +5069,6 @@ ${url}`;
           if (!currentUser) return;
           
           
-          
           const did = await finalizePendingIfAny();
           
           if (did) return;
@@ -5085,7 +5093,7 @@ ${url}`;
           
           if (error) throw error;
           
-          
+          console
           
           const displayName = prof?.display_name || "Usuário";
           
@@ -6165,43 +6173,30 @@ ${url}`;
         // ========= AUTH FORMS =========
         
         $("loginBtn").onclick = async () => {
-          
           const email = $("loginEmail").value.trim();
-          
           const password = $("loginPass").value;
           
-          if (!email || !password) return toast("Informe email e senha.", "warn", "login-empty");
+          if (!email || !password) {
+            return toast("Informe email e senha.", "warn", "login-empty");
+          }
           
           overlaySafe(true, "login");
           
           try {
-            
-            const { error } = await withTimeout(
-              
-              supabase.auth.signInWithPassword({ email, password }),
-              
-              12000,
-              
-              "login"
-              
-            );
+            const { error } = await supabase.auth.signInWithPassword({
+              email,
+              password
+            });
             
             if (error) throw error;
             
             toast("Logado ✅", "success", "login-ok");
             
           } catch (e) {
-            
             console.error(e);
-            
+            overlaySafe(false, "login"); // 👈 só aqui
             toast("Falha no login: " + (e?.message || e), "error", "login-fail");
-            
-          } finally {
-            
-            overlaySafe(false, "login");
-            
           }
-          
         };
         
         
@@ -6223,10 +6218,6 @@ ${url}`;
           if (!email || !password) return toast("Informe email e senha.", "warn", "reg-empty");
           
           if (!gen && !code) return toast("Informe o código do inventário.", "warn", "reg-code");
-          
-          
-          
-          // guarda intenção antes de criar conta (para o onAuthStateChange finalizar)
           
           if (gen) setPending({ mode: "create", displayName: name });
           
@@ -6267,10 +6258,6 @@ ${url}`;
             
             
             toast("Conta criada ✅ (se pedir confirmação, olha seu email)", "success", "reg-ok");
-            
-            // se o auth já logar, onAuthStateChange vai finalizar.
-            
-            // se exigir confirmação por email, o pending fica e finaliza quando logar depois.
             
             showLogin();
             
@@ -6919,6 +6906,8 @@ ${url}`;
         
         // ========= AUTH STATE =========
         
+        let booting = false;
+        
         supabase.auth.onAuthStateChange(async (_event, session) => {
           
           if (booting) return;
@@ -6926,6 +6915,7 @@ ${url}`;
           if (!session?.user) {
             
             await stopRealtime();
+            
             
             currentUser = null;
             currentInventoryId = null;
@@ -6937,6 +6927,8 @@ ${url}`;
             resetEdit();
             showLogin();
             
+            overlaySafe(false, "logout"); // 👈 AQUI TAMBÉM (IMPORTANTE)
+            
             return;
           }
           
@@ -6944,8 +6936,8 @@ ${url}`;
           
           try {
             
-            // 🔥 CORREÇÃO AQUI
             currentUser = session.user;
+            
             
             await bootFromProfile();
             
@@ -6959,6 +6951,8 @@ ${url}`;
           } finally {
             
             booting = false;
+            
+            overlaySafe(false, "auth-change"); // 👈 🔥 ESSA É A PRINCIPAL
             
           }
           
@@ -6993,27 +6987,21 @@ ${url}`;
           
         });
         
-        
-        
-        
-        
-        // ========= Offline / Online =========
-        
         window.addEventListener("offline", () =>
           
           toast("Sem internet. Pode atrasar o tempo real.", "warning", "wifi_off")
           
         );
         
-        
-        
         window.addEventListener("online", () =>
           
           toast("Conexão voltou ✅", "success", "online")
-          
         );
         
+        
       });
+      
+      
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("sw.js");
       }
