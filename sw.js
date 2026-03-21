@@ -1,4 +1,4 @@
-const CACHE = "controllerHouse-v3";
+const CACHE = "controllerHouse-v4";
 
 const urlsToCache = [
   "./",
