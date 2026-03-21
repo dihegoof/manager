@@ -309,6 +309,8 @@
               
             </button>
             
+            <button id="voiceBtn" class="small">🎤</button>
+            
             
             
           </div>
@@ -845,8 +847,7 @@
     
     <script type="module">
       import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-      
-      
+      import { iniciarVoz, encontrarItemIA, norm, falar } from "./js/voice.js";
       
       const SUPABASE_URL = "https://xzcgwnifypiqqushxrcs.supabase.co";
       
@@ -1180,10 +1181,7 @@
 
     — Todos os direitos reservados`;
         
-        
-        
         // ========= TOAST =========
-        
         const lastToastAt = new Map();
         
         function normalizeToastType(type) {
@@ -1334,7 +1332,94 @@
           
         });
         
+        function normalizarNome(nome) {
+          return nome.toLowerCase().replace(/s$/, "").trim();
+        }
         
+        $("voiceBtn").onclick = () => {
+          const acoesFaladas = [];
+          
+          iniciarVoz(items, (acao) => {
+            let { tipo, nome, quantidade } = acao;
+            
+            if (!tipo || !nome) return;
+            
+            const item = encontrarItemIA(nome, items);
+            
+            console.log("🎤 Interpretado:", { tipo, nome, quantidade });
+            
+            // ======================
+            // ➕ ADD
+            // ======================
+            if (tipo === "add") {
+              if (item) {
+                changeQty(item.id, quantidade);
+                acoesFaladas.push(`adicionado ${quantidade} ${item.name}`);
+              } else {
+                $("name").value = nome;
+                $("qty").value = quantidade;
+                $("add").click();
+                acoesFaladas.push(`criado ${quantidade} ${nome}`);
+              }
+            }
+            
+            // ======================
+            // ➖ CONSUMIR
+            // ======================
+            else if (tipo === "consumir") {
+              if (item) {
+                changeQty(item.id, -quantidade);
+                acoesFaladas.push(`removido ${quantidade} ${item.name}`);
+              } else {
+                acoesFaladas.push(`não encontrei ${nome}`);
+              }
+            }
+            
+            // ======================
+            // ✏️ EDITAR
+            // ======================
+            else if (tipo === "editar") {
+              if (item) {
+                startEdit(item);
+                acoesFaladas.push(`editando ${item.name}`);
+              } else {
+                acoesFaladas.push(`não encontrei ${nome}`);
+              }
+            }
+            
+            // ======================
+            // 🗑️ DELETAR
+            // ======================
+            else if (tipo === "deletar") {
+              if (item) {
+                deleteItem(item.id, item.name);
+                acoesFaladas.push(`deletado ${item.name}`);
+              } else {
+                acoesFaladas.push(`não encontrei ${nome}`);
+              }
+            }
+            
+            // 🔊 FALA AQUI (GARANTIDO)
+            falarResumo(acoesFaladas);
+          });
+        };
+        
+        // ======================
+        // 🔊 FALAR RESUMO
+        // ======================
+        function falarResumo(lista) {
+          if (!lista.length) return;
+          
+          const frase = lista.join(", ");
+          
+          console.log("🔊 Fala:", frase);
+          
+          const msg = new SpeechSynthesisUtterance(frase);
+          msg.lang = "pt-BR";
+          
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(msg);
+        }
         
         // ========= VIEWS =========
         
@@ -6998,13 +7083,11 @@ ${url}`;
           toast("Conexão voltou ✅", "success", "online")
         );
         
-        
       });
       
-      
       if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("sw.js");
-      }
+      navigator.serviceWorker.register("sw.js");
+     }
     </script>
 </body>
 
